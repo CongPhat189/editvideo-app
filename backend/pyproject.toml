@@ -1,0 +1,9 @@
+[project]
+name = "editvideo-backend"
+version = "1.0.0"
+description = "Backend FastAPI cho app edit video (Connector Screen)"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
