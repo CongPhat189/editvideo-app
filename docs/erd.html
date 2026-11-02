@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GoClaw Mobile ERD</title>
+<style>
+  :root { --bg:#f7f7f5; --fg:#1d1d1b; --muted:#6b6b66; --card:#ffffff; --line:#e3e2dd; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#171716; --fg:#ecebe6; --muted:#9a9993; --card:#212120; --line:#33322f; } }
+  :root[data-theme="dark"] { --bg:#171716; --fg:#ecebe6; --muted:#9a9993; --card:#212120; --line:#33322f; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding:24px 16px 8px; max-width:1400px; margin:0 auto; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p { margin:0; color:var(--muted); }
+  .legend { display:flex; flex-wrap:wrap; gap:16px; margin-top:12px; font-size:13px; color:var(--muted); }
+  .legend code { color:var(--fg); }
+  main { padding:16px; max-width:1400px; margin:0 auto; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; overflow:auto; }
+  .mermaid svg { max-width:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>GoClaw Mobile – ERD v2.1</h1>
+  <p>16 bảng + auth.users · Supabase PostgreSQL · nguồn: <code>supabase/migrations/20261102000100_schema.sql</code></p>
+  <div class="legend">
+    <span><code>||--o{</code> 1 : N</span>
+    <span><code>||--||</code> 1 : 1</span>
+    <span><code>|o--o{</code> 0..1 : N (FK cho phép NULL)</span>
+    <span><code>..</code> nét đứt = composite FK bảo đảm cùng chủ sở hữu</span>
+  </div>
+</header>
+<main><div class="card"><pre class="mermaid">
+erDiagram
+    auth_users ||--|| profiles : "Supabase Auth"
+    profiles ||--|| user_settings : "cài đặt"
+    profiles ||--o{ devices : "sở hữu"
+    profiles ||--o{ notifications : "nhận"
+    notifications ||--o{ notification_deliveries : "đẩy tới"
+    devices |o--o{ notification_deliveries : "thiết bị"
+    goclaw_workspaces ||--o{ agents : "chứa"
+    profiles ||--o{ user_agent_access : "được cấp"
+    agents ||--o{ user_agent_access : "cấp cho"
+    profiles ||--o{ conversations : "sở hữu"
+    agents ||--o{ conversations : "dùng trong"
+    conversations ||--o{ messages : "chứa"
+    messages |o--o{ messages : "reply_to"
+    profiles ||--o{ message_attachments : "upload"
+    messages |o--o{ message_attachments : "đính kèm"
+    profiles ||--o{ social_accounts : "liên kết"
+    profiles ||--o{ scheduled_tasks : "tạo"
+    conversations |o--o{ scheduled_tasks : "ngữ cảnh AI"
+    agents |o--o{ scheduled_tasks : "thực thi bởi"
+    social_accounts |o--o{ scheduled_tasks : "đăng lên"
+    scheduled_tasks ||--o{ scheduled_task_runs : "mỗi lần chạy"
+    scheduled_task_runs ||--o{ scheduled_task_logs : "mỗi lần thử"
+
+    auth_users {
+        uuid id PK
+        text phone UK "Supabase quản lý"
+        text encrypted_password
+        timestamptz phone_confirmed_at
+    }
+
+    profiles {
+        uuid id PK,FK "= auth.users.id"
+        varchar full_name
+        text avatar_path "{user_id}/{uuid}.jpg"
+        varchar status "active|suspended"
+        timestamptz deletion_requested_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    user_settings {
+        uuid id PK
+        uuid user_id FK,UK
+        varchar theme "light|dark|system"
+        varchar language
+        varchar timezone "đã kiểm tra hợp lệ"
+        boolean notification_enabled
+        jsonb settings_json
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    devices {
+        uuid id PK
+        uuid user_id FK
+        varchar installation_id UK "unique theo user"
+        varchar device_name
+        varchar platform "ios|android"
+        varchar os_version
+        varchar app_version
+        text push_token UK "Expo"
+        timestamptz push_token_updated_at
+        timestamptz last_active_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    notifications {
+        uuid id PK
+        uuid user_id FK
+        varchar category "chat|task|system"
+        varchar title
+        text body
+        jsonb data "deep link"
+        timestamptz read_at
+        timestamptz created_at
+    }
+
+    notification_deliveries {
+        uuid id PK
+        uuid notification_id FK
+        uuid device_id FK "nullable"
+        text push_token
+        varchar status "queued|sent|delivered|failed"
+        varchar expo_ticket_id
+        varchar error_code
+        text error_message
+        timestamptz created_at
+        timestamptz sent_at
+        timestamptz checked_at
+    }
+
+    goclaw_workspaces {
+        uuid id PK
+        varchar name UK
+        text base_url
+        uuid api_key_secret_id "Vault"
+        boolean is_active
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    agents {
+        uuid id PK
+        uuid workspace_id FK
+        varchar name
+        varchar goclaw_agent_id UK "unique theo workspace"
+        text description
+        text avatar_url
+        varchar visibility "public|restricted"
+        boolean is_active
+        int sort_order
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    user_agent_access {
+        uuid user_id PK,FK
+        uuid agent_id PK,FK
+        timestamptz granted_at
+        timestamptz expires_at
+    }
+
+    conversations {
+        uuid id PK
+        uuid user_id FK
+        uuid agent_id FK
+        varchar title
+        varchar title_source "auto|user"
+        varchar goclaw_session_id UK "unique theo agent"
+        varchar status "active|archived|deleted"
+        int message_count
+        timestamptz last_message_at
+        timestamptz pinned_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz archived_at
+        timestamptz deleted_at
+    }
+
+    messages {
+        uuid id PK
+        bigint seq UK "thứ tự, cursor"
+        uuid conversation_id FK
+        uuid user_id FK
+        varchar role "user|assistant|system|tool"
+        text content
+        varchar content_type
+        varchar goclaw_message_id
+        uuid reply_to_message_id FK
+        varchar status "pending..cancelled"
+        uuid idempotency_key UK "theo user"
+        text error_message
+        varchar model
+        int input_tokens
+        int output_tokens
+        numeric cost_usd
+        jsonb metadata
+        timestamptz favorited_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    message_attachments {
+        uuid id PK
+        uuid user_id FK
+        uuid message_id FK "NULL khi chưa gửi"
+        varchar file_name
+        text file_path UK "{user_id}/..."
+        varchar mime_type
+        bigint file_size
+        varchar status "pending_upload|uploaded|attached"
+        jsonb metadata
+        timestamptz created_at
+        timestamptz attached_at
+    }
+
+    social_accounts {
+        uuid id PK
+        uuid user_id FK
+        varchar platform "facebook|tiktok|..."
+        varchar external_account_id UK
+        varchar display_name
+        text avatar_url
+        uuid access_token_secret_id "Vault"
+        uuid refresh_token_secret_id "Vault"
+        timestamptz token_expires_at
+        text_array scopes
+        varchar status "active|expired|revoked|error"
+        text last_error
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    scheduled_tasks {
+        uuid id PK
+        uuid user_id FK
+        uuid conversation_id FK "nullable"
+        uuid agent_id FK "nullable"
+        uuid social_account_id FK "nullable"
+        uuid group_id "đăng đa nền tảng"
+        varchar task_name
+        varchar task_type
+        jsonb payload
+        timestamptz scheduled_at "lần đầu"
+        varchar timezone
+        text recurrence_rule "RRULE"
+        timestamptz ends_at
+        timestamptz next_run_at
+        varchar status "active|paused|finished|cancelled"
+        int max_attempts
+        int run_count
+        timestamptz last_run_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    scheduled_task_runs {
+        uuid id PK
+        uuid task_id FK
+        uuid user_id FK
+        timestamptz scheduled_for UK "theo task"
+        varchar status "scheduled..retrying"
+        int attempts
+        int max_attempts
+        timestamptz next_retry_at
+        varchar locked_by
+        timestamptz locked_at
+        uuid idempotency_key UK
+        varchar external_ref "post id phía ngoài"
+        jsonb result
+        text last_error
+        timestamptz started_at
+        timestamptz finished_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    scheduled_task_logs {
+        uuid id PK
+        uuid run_id FK
+        int attempt_number UK "theo run"
+        varchar status
+        jsonb request_payload
+        jsonb response_payload
+        text error_message
+        timestamptz started_at
+        timestamptz finished_at
+        timestamptz created_at
+    }
+
+    outbox_events {
+        uuid id PK
+        varchar event_type
+        varchar aggregate_type
+        uuid aggregate_id
+        jsonb payload
+        varchar status "pending|processing|done|failed"
+        int attempts
+        timestamptz available_at
+        varchar locked_by
+        timestamptz locked_at
+        text last_error
+        timestamptz created_at
+        timestamptz processed_at
+    }
+</pre></div></main>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  mermaid.initialize({ startOnLoad:true, theme: dark ? "dark" : "neutral", er:{ layoutDirection:"TB", useMaxWidth:false } });
+</script>
+</body>
+</html>
