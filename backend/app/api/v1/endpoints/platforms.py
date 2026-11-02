@@ -17,10 +17,10 @@ def platforms(db: Session = Depends(get_db)) -> dict:
     return {
         "channels": [
             {"name": "Facebook", "description": "Fanpage", "icon": "f", "color": "#1877F2", "status": "Đã kết nối", "type": "connected"},
-            {"name": "YouTube", "description": "Nhu Digital", "icon": "▶", "color": "#FF0000", "status": "Đã kết nối", "type": "connected"},
-            {"name": "TikTok", "description": "@nhu.digitalmkt", "icon": "♪", "color": "#101827", "status": "Hết hạn", "type": "expired"},
+            {"name": "YouTube", "description": "Kênh demo", "icon": "▶", "color": "#FF0000", "status": "Đã kết nối", "type": "connected"},
+            {"name": "TikTok", "description": "@demo", "icon": "♪", "color": "#101827", "status": "Hết hạn", "type": "expired"},
             {"name": "Instagram", "description": "Chưa kết nối", "icon": "IG", "color": "#E1306C", "status": "Kết nối", "type": "disconnected"},
-            {"name": "Website", "description": "nhudigital.vn/blog", "icon": "W", "color": "#526783", "status": "Đã kết nối", "type": "connected"},
+            {"name": "Website", "description": "example.com/blog", "icon": "W", "color": "#526783", "status": "Đã kết nối", "type": "connected"},
         ],
         "notifications": [
             {"name": "Thông báo trên app", "icon": "♧", "enabled": True},

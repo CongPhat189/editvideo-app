@@ -17,7 +17,8 @@ def verify_password(password: str, password_hash: str | None) -> bool:
 
 
 def build_token(user: dict[str, Any]) -> str:
-    return jwt.encode({"sub": user["id"], "email": user["email"]}, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+    # PyJWT bản mới bắt buộc sub là chuỗi, nếu không decode_token sẽ báo lỗi
+    return jwt.encode({"sub": str(user["id"]), "email": user["email"]}, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
 def decode_token(token: str) -> dict[str, Any]:
