@@ -75,6 +75,7 @@ def make_token(
         "sub": str(user_id),
         "typ": token_type,
         "pwf": mobile_security.password_fingerprint(password_hash),
+        "ver": 0,
         "aud": aud,
         "iss": iss,
         "iat": now,

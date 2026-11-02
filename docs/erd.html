@@ -22,7 +22,7 @@
 <body>
 <header>
   <h1>GoClaw Mobile – ERD</h1>
-  <p>8 bảng · Supabase PostgreSQL · nguồn: <code>supabase/migrations/20261102000100_schema.sql</code></p>
+  <p>8 bảng · Supabase PostgreSQL · nguồn: <code>backend/app/models.py</code></p>
   <div class="legend">
     <span><code>||--o{</code> 1 : N</span>
     <span><code>||--||</code> 1 : 1</span>
@@ -49,6 +49,7 @@ erDiagram
         varchar full_name
         varchar phone UK "E.164"
         text password_hash "Argon2id"
+        int token_version "đăng xuất thì tăng"
         text avatar_url
         varchar status "active|suspended|deleted"
         timestamptz created_at

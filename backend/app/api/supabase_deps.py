@@ -33,7 +33,12 @@ async def load_token_user(session: AsyncSession, token: str, token_type) -> AppU
     except (jwt.PyJWTError, TypeError, ValueError):
         raise unauthorized()
     user = await session.get(AppUser, user_id)
-    if user is None or user.status == "deleted" or not fingerprint_matches(claims, user.password_hash):
+    if (
+        user is None
+        or user.status == "deleted"
+        or not fingerprint_matches(claims, user.password_hash)
+        or claims["ver"] != user.token_version
+    ):
         raise unauthorized()
     if user.status != "active":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Tài khoản đã bị khóa")
