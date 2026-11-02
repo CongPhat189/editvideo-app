@@ -15,3 +15,10 @@ def test_other_endpoints_still_work(client):
     assert res.status_code == 200
     res = client.post("/api/videos/generate", json={"prompt": "Video thử"})
     assert res.status_code == 200
+
+
+def test_login_token_can_be_decoded(client):
+    from app.core.security import decode_token
+
+    token = client.post("/api/auth/login", json={"email": "abc@gmail.com", "password": "123456"}).json()["token"]
+    assert decode_token(token)["email"] == "abc@gmail.com"

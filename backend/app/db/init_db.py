@@ -1,12 +1,35 @@
 from __future__ import annotations
 
+import os
+
+from sqlalchemy.engine import make_url
+
+from app.core.config import settings
 from app.core.security import hash_password
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.models import Account, IntegrationConfig, User
 
 
+def check_local_database() -> None:
+    """Không tạo bảng demo trên database thật: các bảng này không có RLS và có tài khoản, key demo."""
+    url = make_url(settings.DATABASE_URL)
+    if url.get_backend_name() == "sqlite":
+        return
+    supabase_url = make_url(os.environ["DATABASE_URL"]) if os.environ.get("DATABASE_URL") else None
+    same_as_supabase = supabase_url is not None and (url.host, url.port, url.database) == (
+        supabase_url.host,
+        supabase_url.port,
+        supabase_url.database,
+    )
+    if same_as_supabase or "supabase" in (url.host or ""):
+        raise RuntimeError("LOCAL_DATABASE_URL không được trỏ vào Supabase")
+    if not settings.ALLOW_NON_SQLITE_LOCAL_DB:
+        raise RuntimeError("LOCAL_DATABASE_URL không phải SQLite: đặt ALLOW_NON_SQLITE_LOCAL_DB=true nếu thật sự muốn")
+
+
 def init_db() -> None:
+    check_local_database()
     Base.metadata.create_all(bind=engine)
     seed_demo_data()
 

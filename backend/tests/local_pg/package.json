@@ -1,0 +1,11 @@
+{
+  "name": "local-pg",
+  "private": true,
+  "type": "module",
+  "description": "Postgres chạy trên máy (PGlite) giả lập các schema của Supabase, chỉ dùng để test",
+  "scripts": { "start": "node server.mjs" },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.14",
+    "@electric-sql/pglite-socket": "0.2.17"
+  }
+}
