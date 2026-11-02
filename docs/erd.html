@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GoClaw Mobile ERD</title>
+<style>
+  :root { --bg:#f7f7f5; --fg:#1d1d1b; --muted:#6b6b66; --card:#ffffff; --line:#e3e2dd; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#171716; --fg:#ecebe6; --muted:#9a9993; --card:#212120; --line:#33322f; } }
+  :root[data-theme="dark"] { --bg:#171716; --fg:#ecebe6; --muted:#9a9993; --card:#212120; --line:#33322f; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding:24px 16px 8px; max-width:1400px; margin:0 auto; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  p { margin:0; color:var(--muted); }
+  .legend { display:flex; flex-wrap:wrap; gap:16px; margin-top:12px; font-size:13px; color:var(--muted); }
+  .legend code { color:var(--fg); }
+  main { padding:16px; max-width:1400px; margin:0 auto; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; overflow:auto; }
+  .mermaid svg { max-width:none !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>GoClaw Mobile – ERD</h1>
+  <p>8 bảng · Supabase PostgreSQL · nguồn: <code>backend/app/models.py</code></p>
+  <div class="legend">
+    <span><code>||--o{</code> 1 : N</span>
+    <span><code>||--||</code> 1 : 1</span>
+    <span><code>|o--o{</code> 0..1 : N (FK cho phép NULL)</span>
+    <span><code>..</code> nét đứt = composite FK bảo đảm cùng chủ sở hữu</span>
+  </div>
+</header>
+<main><div class="card"><pre class="mermaid">
+erDiagram
+    users ||--|| user_settings : "cài đặt"
+    users ||--o{ conversations : "sở hữu"
+    users ||--o{ messages : "chủ sở hữu (composite FK)"
+    users ||--o{ scheduled_tasks : "tạo"
+    agents ||--o{ conversations : "được dùng trong"
+    agents |o--o{ scheduled_tasks : "thực thi bởi"
+    conversations ||--o{ messages : "chứa"
+    conversations |o--o{ scheduled_tasks : "ngữ cảnh AI"
+    messages |o--o{ messages : "reply_to"
+    messages ||--o{ message_attachments : "đính kèm"
+    scheduled_tasks ||--o{ scheduled_task_logs : "nhật ký"
+
+    users {
+        uuid id PK
+        varchar full_name
+        varchar phone UK "E.164"
+        text password_hash "Argon2id"
+        int token_version "đăng xuất thì tăng"
+        text avatar_url
+        varchar status "active|suspended|deleted"
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz last_login_at
+        timestamptz deleted_at
+    }
+
+    user_settings {
+        uuid id PK
+        uuid user_id FK,UK
+        varchar theme "light|dark|system"
+        varchar language
+        varchar timezone "tên IANA"
+        boolean notification_enabled
+        jsonb settings_json
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    agents {
+        uuid id PK
+        varchar name
+        text key "API key - mã hoá khi lưu"
+        varchar domain "vd: https://goclaw.abc.com"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    conversations {
+        uuid id PK
+        uuid user_id FK
+        uuid agent_id FK
+        varchar title
+        varchar goclaw_session_id UK "nullable"
+        varchar status "active|archived|deleted"
+        int message_count
+        timestamptz last_message_at
+        timestamptz pinned_at
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz archived_at
+        timestamptz deleted_at
+    }
+
+    messages {
+        uuid id PK
+        uuid conversation_id FK
+        uuid user_id FK
+        varchar role "user|assistant|system|tool"
+        text content
+        varchar content_type "text|image|file|audio|video"
+        varchar goclaw_message_id
+        uuid reply_to_message_id FK
+        varchar status "pending..cancelled"
+        uuid idempotency_key UK "per user"
+        text error_message
+        jsonb metadata "tokens, model, tools"
+        timestamptz favorited_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    message_attachments {
+        uuid id PK
+        uuid message_id FK
+        varchar file_name
+        text file_path UK
+        text file_url
+        varchar mime_type
+        bigint file_size
+        timestamptz created_at
+    }
+
+    scheduled_tasks {
+        uuid id PK
+        uuid user_id FK
+        uuid conversation_id FK "nullable"
+        uuid agent_id FK "nullable"
+        varchar task_name
+        varchar task_type "send_message|execute_agent|..."
+        jsonb payload
+        timestamptz scheduled_at
+        varchar timezone
+        text recurrence_rule "RRULE"
+        varchar status "scheduled..retrying"
+        int attempts
+        int max_attempts
+        timestamptz next_retry_at
+        text last_error
+        varchar locked_by
+        timestamptz locked_at
+        timestamptz executed_at
+        timestamptz completed_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    scheduled_task_logs {
+        uuid id PK
+        uuid task_id FK
+        int attempt_number
+        varchar status
+        jsonb request_payload
+        jsonb response_payload
+        text error_message
+        timestamptz started_at
+        timestamptz finished_at
+        timestamptz created_at
+    }
+</pre></div></main>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+  mermaid.initialize({ startOnLoad:true, theme: dark ? "dark" : "neutral", er:{ layoutDirection:"TB", useMaxWidth:false } });
+</script>
+</body>
+</html>

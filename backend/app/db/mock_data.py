@@ -89,7 +89,7 @@ state: dict[str, Any] = {
     "channels": [
         {
             "name": "Facebook",
-            "description": "Fanpage nhu.digitalmkt",
+            "description": "Fanpage demo",
             "icon": "f",
             "color": "#1877F2",
             "status": "Đã kết nối",
@@ -97,7 +97,7 @@ state: dict[str, Any] = {
         },
         {
             "name": "YouTube",
-            "description": "Nhu Digital",
+            "description": "Kênh demo",
             "icon": "▶",
             "color": "#FF0000",
             "status": "Đã kết nối",
@@ -105,7 +105,7 @@ state: dict[str, Any] = {
         },
         {
             "name": "TikTok",
-            "description": "@nhu.digitalmkt",
+            "description": "@demo",
             "icon": "♪",
             "color": "#101827",
             "status": "Hết hạn",
@@ -121,7 +121,7 @@ state: dict[str, Any] = {
         },
         {
             "name": "Website",
-            "description": "nhudigital.vn/blog",
+            "description": "example.com/blog",
             "icon": "W",
             "color": "#526783",
             "status": "Đã kết nối",
