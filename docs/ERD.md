@@ -22,6 +22,7 @@ erDiagram
         varchar full_name
         varchar phone UK "E.164"
         text password_hash "Argon2id"
+        int token_version "đăng xuất thì tăng"
         text avatar_url
         varchar status "active|suspended|deleted"
         timestamptz created_at

@@ -85,12 +85,14 @@ class AppUser(Base):
         CheckConstraint("phone ~ '^\\+[1-9][0-9]{7,14}$'", name="users_phone_chk"),
         CheckConstraint("status in ('active', 'suspended', 'deleted')", name="users_status_chk"),
         CheckConstraint("(status = 'deleted') = (deleted_at is not null)", name="users_deleted_chk"),
+        CheckConstraint("token_version >= 0", name="users_token_version_chk"),
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     full_name: Mapped[str] = mapped_column(String(150))
     phone: Mapped[str] = mapped_column(String(20))  # E.164, vd +84912345678
     password_hash: Mapped[str] = mapped_column(Text)  # Argon2id
+    token_version: Mapped[int] = mapped_column(Integer, server_default=text("0"))  # đăng xuất thì tăng
     avatar_url: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), server_default=text("'active'"))
     created_at: Mapped[datetime] = created_at()

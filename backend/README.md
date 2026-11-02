@@ -183,6 +183,7 @@ Mở http://localhost:4000/docs để thử API. Các API mobile (trừ `/health
 | `POST /auth/register` | đăng ký, nhận token luôn |
 | `POST /auth/login`, `/auth/refresh` | đăng nhập, gia hạn token |
 | `POST /auth/change-password` | đổi mật khẩu, mọi token cũ hết tác dụng |
+| `POST /auth/logout` | đăng xuất, mọi token của tài khoản trên mọi thiết bị hết tác dụng |
 | `GET /me`, `PATCH /me`, `PATCH /me/settings` | hồ sơ, cài đặt |
 | `GET /agents` | danh sách agent (chỉ id và tên, không trả key và domain) |
 | `GET/POST /conversations` | danh sách (ghim trước, mới nhất trước) / tạo mới |
@@ -207,13 +208,15 @@ và đọc lại tài khoản trong database, nên khóa tài khoản có hiệu
 Gọi API:        Authorization: Bearer <access_token>
 Hết hạn (401):  POST /auth/refresh  {refresh_token}               -> cặp token mới, lưu đè cặp cũ
 Đổi mật khẩu:   POST /auth/change-password {current_password, new_password} -> cặp token mới, lưu đè cặp cũ
-Đăng xuất:      app tự xóa token trên máy (không có API)
+Đăng xuất:      POST /auth/logout (Bearer access_token)           -> 204, mọi token trên mọi thiết bị hết tác dụng
 ```
 
 Lưu ý khi làm app:
 
 - Chỉ xóa token khi nhận `401` từ `/auth/refresh`. `503` và `429` là lỗi tạm thời: giữ token, thử lại sau.
 - Lưu token trong SecureStore.
+- Đăng xuất: gọi `/auth/logout` rồi luôn xóa token trên máy, kể cả khi API lỗi hoặc mất mạng. Access token hết hạn thì gọi
+  `/auth/refresh` trước; nhận `401` nghĩa là đã đăng xuất rồi. Máy khác của tài khoản sẽ nhận `401` và phải đăng nhập lại.
 - Mặc định chỉ nhận số Việt Nam; `ALLOW_INTERNATIONAL_PHONES=true` để mở số nước ngoài.
 - App chỉ đi qua API này. Mọi bảng đã khóa với anon key, không dùng được supabase-js hay Realtime để đọc dữ liệu.
 
@@ -221,8 +224,8 @@ Hệ quả của thiết kế hiện tại (không xác thực số điện tho�
 
 - Ai cũng đăng ký được bằng số của người khác, và chủ số thật nhận `409`. Đăng ký cũng cho biết số nào đã có tài khoản.
 - Không có Quên mật khẩu. Người dùng quên thì admin chạy `manage.py set-password`.
-- Không thu hồi được từng token. Đăng xuất chỉ xóa token trên máy; token bị lộ dùng được tới khi hết hạn, và refresh token
-  đổi được token mới liên tục. Cách cắt duy nhất: đổi mật khẩu hoặc khóa tài khoản (`users.status`).
+- Không đăng xuất riêng từng thiết bị được. `/auth/logout` tăng `users.token_version` nên đăng xuất mọi thiết bị một lúc.
+  Token bị lộ thì cắt bằng đăng xuất, đổi mật khẩu hoặc khóa tài khoản (`users.status`).
 
 Trước khi lên production:
 

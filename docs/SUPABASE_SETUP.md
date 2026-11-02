@@ -18,7 +18,7 @@ docs/ERD.md, erd.png, erd.svg, erd.html
 | Project | `editvideo-app` – ref `uzgccexajrahaumdofqy` |
 | Region | `eu-west-2` (London) – người dùng ở VN sẽ có độ trễ cao hơn Singapore (`ap-southeast-1`); region không đổi được sau khi tạo |
 | Dashboard | https://supabase.com/dashboard/project/uzgccexajrahaumdofqy |
-| Hiện trạng | Đã áp migration `0003`: 8 bảng, RLS bật hết, anon key bị từ chối, Security/Performance Advisor không có cảnh báo |
+| Hiện trạng | Đã áp migration `0004`: 8 bảng, RLS bật hết, anon key bị từ chối, Security/Performance Advisor không có cảnh báo |
 
 ## Kiến trúc
 

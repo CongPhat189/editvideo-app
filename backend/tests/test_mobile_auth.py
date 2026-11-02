@@ -13,7 +13,7 @@ from app.core import mobile_security
 from app.core.config import SupabaseNotConfigured, get_settings
 from app.core.rate_limit import RateLimiter, limiter
 from app.schemas.mobile import RegisterIn
-from tests.conftest import Client, make_token, new_phone, new_user, sql
+from tests.conftest import TEST_HASH, Client, make_token, new_phone, new_user, sql
 
 PASSWORD = "matkhau-rat-dai"
 
@@ -196,6 +196,95 @@ async def test_change_password_revokes_all_old_tokens():
         assert (await c.get("/me")).status_code == 200
 
 
+# ---------------------------------------------------------------- đăng xuất
+async def test_logout_revokes_tokens_on_every_device():
+    phone = new_phone()
+    async with Client() as c:
+        device_a = await _register(c, phone=phone)
+        device_b = (await c.post("/auth/login", json={"phone": phone, "password": PASSWORD})).json()
+    async with Client(token=device_a["access_token"]) as c:
+        r = await c.post("/auth/logout")
+        assert r.status_code == 204 and r.content == b""
+        assert (await c.get("/me")).status_code == 401
+        assert (await c.post("/auth/logout")).status_code == 401  # token đã thu hồi không tăng số thêm lần nữa
+    async with Client(token=device_b["access_token"]) as c:
+        assert (await c.get("/me")).status_code == 401
+    async with Client() as c:
+        for device in (device_a, device_b):
+            assert (await c.post("/auth/refresh", json={"refresh_token": device["refresh_token"]})).status_code == 401
+    rows = await sql("select token_version from users where id = :u", u=device_a["user"]["id"])
+    assert rows[0]["token_version"] == 1
+
+
+async def test_tokens_after_logout_work_through_refresh_and_change_password():
+    phone = new_phone()
+    async with Client() as c:
+        first = await _register(c, phone=phone)
+    async with Client(token=first["access_token"]) as c:
+        assert (await c.post("/auth/logout")).status_code == 204
+    async with Client() as c:
+        login = (await c.post("/auth/login", json={"phone": phone, "password": PASSWORD})).json()
+        r = await c.post("/auth/refresh", json={"refresh_token": login["refresh_token"]})
+        assert r.status_code == 200
+        refreshed = r.json()
+    async with Client(token=refreshed["access_token"]) as c:
+        assert (await c.get("/me")).status_code == 200
+        r = await c.post("/auth/change-password", json={"current_password": PASSWORD, "new_password": "mat-khau-moi-123"})
+        assert r.status_code == 200
+    async with Client(token=r.json()["access_token"]) as c:
+        assert (await c.get("/me")).status_code == 200
+        assert (await c.post("/auth/logout")).status_code == 204
+        assert (await c.get("/me")).status_code == 401
+
+
+async def test_logout_needs_a_valid_access_token():
+    user = await new_user()
+    version = lambda: sql("select token_version from users where id = :u", u=user)  # noqa: E731
+    async with Client() as c:
+        assert (await c.post("/auth/logout")).status_code == 401
+    for bad in ("rac", make_token(user, token_type="refresh"), make_token(user, exp_in=-1)):
+        async with Client(token=bad) as c:
+            assert (await c.post("/auth/logout")).status_code == 401
+    assert (await version())[0]["token_version"] == 0
+
+
+async def test_logout_of_one_account_keeps_others_signed_in():
+    async with Client() as c:
+        mine, other = await _register(c), await _register(c)
+    async with Client(token=mine["access_token"]) as c:
+        assert (await c.post("/auth/logout")).status_code == 204
+    async with Client(token=other["access_token"]) as c:
+        assert (await c.get("/me")).status_code == 200
+
+
+async def test_suspended_account_cannot_call_logout():
+    async with Client() as c:
+        body = await _register(c)
+    await sql("update users set status = 'suspended' where id = :u", u=body["user"]["id"])
+    async with Client(token=body["access_token"]) as c:
+        assert (await c.post("/auth/logout")).status_code == 403
+
+
+async def test_token_version_claim_is_required_and_must_match():
+    user = await new_user()
+    async with Client(token=make_token(user, ver=1)) as c:  # chưa tới số này, vd token giả từ tương lai
+        assert (await c.get("/me")).status_code == 401
+    now = int(time.time())
+    no_ver = jwt.encode(
+        {
+            "sub": str(user), "typ": "access", "pwf": mobile_security.password_fingerprint(TEST_HASH),
+            "aud": mobile_security.AUDIENCE, "iss": mobile_security.ISSUER, "iat": now, "exp": now + 60,
+        },
+        get_settings().auth_jwt_secret,
+        algorithm="HS256",
+    )
+    async with Client(token=no_ver) as c:  # token cấp trước khi có cột token_version
+        assert (await c.get("/me")).status_code == 401
+    async with Client(token=make_token(user)) as c:
+        body = (await c.get("/me")).json()
+    assert "token_version" not in body and "password_hash" not in body
+
+
 async def test_expired_refresh_token_rejected():
     user = await new_user()
     token = make_token(user, token_type="refresh", exp_in=-1)
@@ -207,7 +296,7 @@ def test_weak_or_missing_jwt_secret_refused():
     for bad in (None, "", "qua-ngan"):
         with mock.patch.object(get_settings(), "auth_jwt_secret", bad):
             with pytest.raises(SupabaseNotConfigured):
-                mobile_security.issue_tokens(uuid.uuid4(), "hash")
+                mobile_security.issue_tokens(uuid.uuid4(), "hash", 0)
 
 
 async def test_missing_secret_is_503_not_crash():

@@ -199,8 +199,8 @@ async def test_schema_is_exactly_the_diagram():
     """)
     tables = {r["table_name"]: set(r["cols"]) for r in rows}
     assert tables == {
-        "users": {"id", "full_name", "phone", "password_hash", "avatar_url", "status", "created_at", "updated_at",
-                  "last_login_at", "deleted_at"},
+        "users": {"id", "full_name", "phone", "password_hash", "token_version", "avatar_url", "status", "created_at",
+                  "updated_at", "last_login_at", "deleted_at"},
         "user_settings": {"id", "user_id", "theme", "language", "timezone", "notification_enabled", "settings_json",
                           "created_at", "updated_at"},
         "agents": {"id", "name", "key", "domain", "created_at", "updated_at"},
