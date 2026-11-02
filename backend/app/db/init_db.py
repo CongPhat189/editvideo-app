@@ -38,7 +38,7 @@ def seed_demo_data() -> None:
     db = SessionLocal()
     try:
         if db.query(User).count() == 0:
-            user = User(full_name="Nhu Admin", email="abc@gmail.com", phone="0900000000", is_active=True)
+            user = User(full_name="Demo Admin", email="abc@gmail.com", phone="0900000000", is_active=True)
             db.add(user)
             db.commit()
             db.refresh(user)
