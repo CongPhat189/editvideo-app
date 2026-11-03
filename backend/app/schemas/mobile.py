@@ -97,6 +97,44 @@ class AgentOut(ORM):
     name: str
 
 
+class AgentCreate(BaseModel):
+    name: Name
+    domain: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255), AfterValidator(_no_nul)]
+    api_key: str | None = None
+    agent_key: str | None = None
+
+
+class AgentUpdate(BaseModel):
+    name: Name | None = None
+    domain: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255), AfterValidator(_no_nul)] | None = None
+    api_key: str | None = None
+    agent_key: str | None = None
+
+
+class AgentDetailOut(ORM):
+    id: uuid.UUID
+    name: str
+    domain: str
+    has_api_key: bool = False
+    has_agent_key: bool = False
+    masked_api_key: str | None = None
+    masked_agent_key: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class AgentTestConnectionIn(BaseModel):
+    domain: str | None = None
+    api_key: str | None = None
+    agent_key: str | None = None
+
+
+class AgentTestConnectionOut(BaseModel):
+    ok: bool
+    message: str
+    details: dict | None = None
+
+
 class ConversationCreate(BaseModel):
     agent_id: uuid.UUID
     title: Title | None = None
@@ -193,3 +231,87 @@ class TokenOut(BaseModel):
     expires_in: int = Field(description="Số giây access token còn hiệu lực")
     expires_at: int = Field(description="Thời điểm access token hết hạn (Unix time)")
     user: AuthUser
+
+
+# ==================== Scheduled Tasks (Lịch hẹn / Lịch đăng bài) ====================
+
+TaskType = Literal["send_message", "execute_agent", "execute_workflow", "publish_post"]
+TaskStatus = Literal["scheduled", "processing", "completed", "failed", "cancelled", "retrying"]
+
+
+class ScheduledTaskCreate(BaseModel):
+    task_name: Name
+    task_type: TaskType
+    agent_id: uuid.UUID | None = None
+    conversation_id: uuid.UUID | None = None
+    payload: dict = Field(default_factory=dict)
+    scheduled_at: datetime
+    timezone: Annotated[str, Field(max_length=100), AfterValidator(_no_nul)] = "Asia/Ho_Chi_Minh"
+    recurrence_rule: Annotated[str, Field(max_length=255), AfterValidator(_no_nul)] | None = None
+    max_attempts: int = Field(default=3, ge=1, le=10)
+
+
+class ScheduledTaskUpdate(BaseModel):
+    task_name: Name | None = None
+    task_type: TaskType | None = None
+    agent_id: uuid.UUID | None = None
+    conversation_id: uuid.UUID | None = None
+    payload: dict | None = None
+    scheduled_at: datetime | None = None
+    timezone: Annotated[str, Field(max_length=100), AfterValidator(_no_nul)] | None = None
+    recurrence_rule: Annotated[str, Field(max_length=255), AfterValidator(_no_nul)] | None = None
+    status: Literal["scheduled", "cancelled"] | None = None
+
+
+class ScheduledTaskLogOut(ORM):
+    id: uuid.UUID
+    task_id: uuid.UUID
+    attempt_number: int
+    status: str
+    request_payload: dict | None = None
+    response_payload: dict | None = None
+    error_message: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    created_at: datetime
+
+
+class ScheduledTaskOut(ORM):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    conversation_id: uuid.UUID | None = None
+    agent_id: uuid.UUID | None = None
+    task_name: str
+    task_type: str
+    payload: dict
+    scheduled_at: datetime
+    timezone: str
+    recurrence_rule: str | None = None
+    status: str
+    attempts: int
+    max_attempts: int
+    next_retry_at: datetime | None = None
+    last_error: str | None = None
+    executed_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ScheduledTaskDetailOut(ScheduledTaskOut):
+    logs: list[ScheduledTaskLogOut] = []
+
+
+class ScheduledTaskPage(BaseModel):
+    items: list[ScheduledTaskOut]
+    total: int
+    limit: int
+    offset: int
+
+
+class ScheduledTaskExecuteOut(BaseModel):
+    task_id: uuid.UUID
+    status: str
+    attempt_number: int
+    result: dict | None = None
+    error: str | None = None
