@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import DrawerScreen from '@/components/DrawerScreen';
 import { CalendarIcon, SendIcon } from '@/components/HomeIcons';
 import PageHeader from '@/components/PageHeader';
 import { MyUserContext } from '@/config/Contexts';
@@ -49,6 +50,15 @@ const MessageBubble = ({ message }) => {
 
 export default function ProjectChat() {
   const { id } = useLocalSearchParams();
+
+  return (
+    <DrawerScreen>
+      {(menuButton) => <ChatContent id={id} menuButton={menuButton} />}
+    </DrawerScreen>
+  );
+}
+
+function ChatContent({ id, menuButton }) {
   const [user] = use(MyUserContext);
   const token = user?.access_token;
   const [project, setProject] = useState(null);
@@ -142,7 +152,7 @@ export default function ProjectChat() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
-      <PageHeader title={project?.title || ''} />
+      <PageHeader title={project?.title || ''} left={menuButton} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

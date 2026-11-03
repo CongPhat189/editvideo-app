@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { use, useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
@@ -8,7 +8,6 @@ import {
   AgentIcon,
   ChatIcon,
   ClockIcon,
-  EditIcon,
   FolderIcon,
   MoreIcon,
   SettingsIcon,
@@ -20,8 +19,10 @@ import { getProjects, getRecentProjectIds } from '@/services/projects';
 const FOOTER_HEIGHT = 48;
 const FOOTER_GAP = 12;
 const FADE_HEIGHT = 96;
-const SMALL_SCREEN = 360;
 const UNTITLED = 'Cuộc trò chuyện chưa đặt tên';
+
+// Giữ danh sách lần tải trước để Sidebar của màn hình mới hiện ngay, không bị trống rồi mới hiện lại
+let cache = { token: null, projects: [], recentIds: [] };
 
 // Không có href: chỉ đóng Sidebar
 const NAV_ITEMS = [
@@ -43,14 +44,13 @@ const Row = ({ label, Icon, onPress }) => (
   </Pressable>
 );
 
-export default function Sidebar({ onClose }) {
+export default function Sidebar({ onClose, onNavigate }) {
   const [user] = use(MyUserContext);
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const isSmallScreen = width < SMALL_SCREEN;
-  const [projects, setProjects] = useState([]);
-  const [recentIds, setRecentIds] = useState([]);
   const token = user?.access_token;
+  const cached = cache.token === token ? cache : { projects: [], recentIds: [] };
+  const [projects, setProjects] = useState(cached.projects);
+  const [recentIds, setRecentIds] = useState(cached.recentIds);
 
   useFocusEffect(
     useCallback(() => {
@@ -58,6 +58,7 @@ export default function Sidebar({ onClose }) {
       let active = true;
       Promise.all([getProjects(token), getRecentProjectIds(token)])
         .then(([projectItems, ids]) => {
+          cache = { token, projects: projectItems, recentIds: ids };
           if (!active) return;
           setProjects(projectItems);
           setRecentIds(ids);
@@ -75,13 +76,15 @@ export default function Sidebar({ onClose }) {
   const footerSpace = insets.bottom + FOOTER_GAP;
 
   const openPage = (href) => {
-    onClose();
-    if (href) router.push(href);
+    if (href) onNavigate(href);
+    else onClose();
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left']}>
-      <View style={styles.header} />
+      <View style={styles.header}>
+        <Text style={styles.logo} accessibilityRole="header">AI EDIT</Text>
+      </View>
 
       <ScrollView
         style={styles.scroll}
@@ -98,13 +101,13 @@ export default function Sidebar({ onClose }) {
             key={item.id}
             label={item.title || UNTITLED}
             Icon={ChatIcon}
-            onPress={() => openPage(`/projects/${item.id}`)}
+            onPress={() => onNavigate(`/projects/${item.id}`)}
           />
         ))}
 
         {recents.length > 0 ? <Text style={styles.sectionTitle}>Gần đây</Text> : null}
         {recents.map((item) => (
-          <Row key={item.id} label={item.title || UNTITLED} onPress={() => openPage(`/projects/${item.id}`)} />
+          <Row key={item.id} label={item.title || UNTITLED} onPress={() => onNavigate(`/projects/${item.id}`)} />
         ))}
       </ScrollView>
 
@@ -123,20 +126,7 @@ export default function Sidebar({ onClose }) {
         <Rect width="100%" height="100%" fill="url(#sidebarFade)" />
       </Svg>
 
-      <View style={[styles.footer, isSmallScreen && styles.footerSmall, { bottom: footerSpace }]}>
-        <Pressable
-          onPress={onClose}
-          style={({ pressed }) => [
-            styles.chatButton,
-            isSmallScreen && styles.chatButtonSmall,
-            pressed && styles.pressed,
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel="Đoạn chat"
-        >
-          <EditIcon />
-          <Text style={styles.chatButtonText} numberOfLines={1}>Đoạn chat</Text>
-        </Pressable>
+      <View style={[styles.footer, { bottom: footerSpace }]}>
         <Pressable
           onPress={() => router.push('/settings')}
           style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
@@ -157,6 +147,14 @@ const styles = StyleSheet.create({
   },
   header: {
     height: 56,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  logo: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   pressed: {
     opacity: 0.7,
@@ -197,31 +195,8 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
+    justifyContent: 'flex-end',
     paddingHorizontal: 24,
-  },
-  footerSmall: {
-    paddingHorizontal: 12,
-  },
-  chatButton: {
-    minHeight: FOOTER_HEIGHT,
-    flexShrink: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 20,
-    borderRadius: FOOTER_HEIGHT / 2,
-    backgroundColor: colors.accent,
-  },
-  chatButtonSmall: {
-    paddingHorizontal: 12,
-  },
-  chatButtonText: {
-    flexShrink: 1,
-    color: colors.text,
-    fontSize: 17,
-    fontWeight: '600',
   },
   settingsButton: {
     width: FOOTER_HEIGHT,

@@ -3,24 +3,29 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { BackIcon } from '@/components/HomeIcons';
 import { colors } from '@/constants/theme';
+import useTopBarSpace from '@/hooks/useTopBarSpace';
 
 const goBack = () => {
   if (router.canGoBack()) router.back();
   else router.replace('/');
 };
 
-export default function PageHeader({ title }) {
+export default function PageHeader({ title, left }) {
+  const topBarSpace = useTopBarSpace();
+
   return (
-    <View style={styles.header}>
-      <Pressable
-        onPress={goBack}
-        hitSlop={2}
-        style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
-        accessibilityRole="button"
-        accessibilityLabel="Quay lại"
-      >
-        <BackIcon size={22} />
-      </Pressable>
+    <View style={[styles.header, { paddingTop: topBarSpace }]}>
+      {left ?? (
+        <Pressable
+          onPress={goBack}
+          hitSlop={2}
+          style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Quay lại"
+        >
+          <BackIcon size={22} />
+        </Pressable>
+      )}
       <Text style={styles.title} numberOfLines={1}>{title}</Text>
       <View style={styles.spacer} />
     </View>
@@ -33,7 +38,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 16,
-    paddingVertical: 4,
+    paddingBottom: 4,
   },
   backButton: {
     width: 44,

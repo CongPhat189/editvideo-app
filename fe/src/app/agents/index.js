@@ -5,6 +5,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-nat
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AuthButton from '@/components/AuthButton';
+import DrawerScreen from '@/components/DrawerScreen';
 import { AgentIcon } from '@/components/HomeIcons';
 import PageHeader from '@/components/PageHeader';
 import { MyUserContext } from '@/config/Contexts';
@@ -13,6 +14,14 @@ import { getAgents } from '@/services/agents';
 import { getErrorMessage } from '@/services/auth';
 
 export default function Agents() {
+  return (
+    <DrawerScreen>
+      {(menuButton) => <AgentsContent menuButton={menuButton} />}
+    </DrawerScreen>
+  );
+}
+
+function AgentsContent({ menuButton }) {
   const [user] = use(MyUserContext);
   const token = user?.access_token;
   const [agents, setAgents] = useState(null);
@@ -41,7 +50,7 @@ export default function Agents() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
-      <PageHeader title="Agent" />
+      <PageHeader title="Agent" left={menuButton} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.page}>
           <AuthButton title="+ Thêm Agent" onPress={() => router.push('/agents/new')} />
@@ -70,7 +79,7 @@ export default function Agents() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.backgroundDeep,
+    backgroundColor: colors.background,
   },
   content: {
     paddingHorizontal: 16,
@@ -101,7 +110,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
     paddingHorizontal: 16,
     borderRadius: 20,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
   },
   row: {
     flexDirection: 'row',

@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AuthButton from '@/components/AuthButton';
 import AuthField from '@/components/AuthField';
+import DrawerScreen from '@/components/DrawerScreen';
 import { AgentIcon, CheckIcon, FolderIcon } from '@/components/HomeIcons';
 import PageHeader from '@/components/PageHeader';
 import { MyUserContext } from '@/config/Contexts';
@@ -26,6 +27,14 @@ import { createProject } from '@/services/projects';
 const MAX_NAME_LENGTH = 255;
 
 export default function NewProject() {
+  return (
+    <DrawerScreen>
+      {(menuButton) => <NewProjectContent menuButton={menuButton} />}
+    </DrawerScreen>
+  );
+}
+
+function NewProjectContent({ menuButton }) {
   const [user] = use(MyUserContext);
   const token = user?.access_token;
   const [name, setName] = useState('');
@@ -81,7 +90,7 @@ export default function NewProject() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
-      <PageHeader title="Dự án mới" />
+      <PageHeader title="Dự án mới" left={menuButton} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -147,7 +156,7 @@ export default function NewProject() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.backgroundDeep,
+    backgroundColor: colors.background,
   },
   flex: {
     flex: 1,
@@ -182,7 +191,7 @@ const styles = StyleSheet.create({
   card: {
     paddingHorizontal: 16,
     borderRadius: 20,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
   },
   agentRow: {
     flexDirection: 'row',

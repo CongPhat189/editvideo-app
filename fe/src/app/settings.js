@@ -18,8 +18,11 @@ import {
 } from '@/components/HomeIcons';
 import { MyUserContext } from '@/config/Contexts';
 import { colors } from '@/constants/theme';
+import useTopBarSpace from '@/hooks/useTopBarSpace';
 
 const NO_DATA = 'Chưa có';
+const PAGE_MAX_WIDTH = 560;
+const PAGE_PADDING = 16;
 
 // Bản mẫu giao diện: các mục chưa gắn chức năng
 const CUSTOMIZE_ROWS = [
@@ -56,6 +59,7 @@ const SettingsCard = ({ rows }) => (
 
 export default function Settings() {
   const [user] = use(MyUserContext);
+  const topBarSpace = useTopBarSpace();
 
   const close = () => {
     if (router.canGoBack()) router.back();
@@ -72,7 +76,7 @@ export default function Settings() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar style="light" />
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: topBarSpace }]}>
         <Pressable
           onPress={close}
           hitSlop={2}
@@ -137,9 +141,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.backgroundDeep,
   },
   header: {
+    width: '100%',
+    maxWidth: PAGE_MAX_WIDTH + PAGE_PADDING * 2,
+    alignSelf: 'center',
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    paddingHorizontal: 16,
+    paddingHorizontal: PAGE_PADDING,
     paddingBottom: 8,
   },
   closeButton: {
@@ -162,12 +169,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: PAGE_PADDING,
     paddingBottom: 40,
   },
   page: {
     width: '100%',
-    maxWidth: 560,
+    maxWidth: PAGE_MAX_WIDTH,
     alignSelf: 'center',
   },
   profile: {

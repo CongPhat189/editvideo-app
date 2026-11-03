@@ -1,45 +1,38 @@
 import { StatusBar } from 'expo-status-bar';
-import { use, useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { use } from 'react';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { MenuIcon } from '@/components/HomeIcons';
-import PushDrawer from '@/components/PushDrawer';
-import Sidebar from '@/components/Sidebar';
+import DrawerScreen from '@/components/DrawerScreen';
 import { MyUserContext } from '@/config/Contexts';
 import { colors } from '@/constants/theme';
+import useTopBarSpace from '@/hooks/useTopBarSpace';
 
 const WIDE_SCREEN = 768;
 
 export default function Home() {
   const [user] = use(MyUserContext);
   const { width } = useWindowDimensions();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
+  const topBarSpace = useTopBarSpace();
 
   return (
-    <PushDrawer open={sidebarOpen} onClose={closeSidebar} drawer={<Sidebar onClose={closeSidebar} />}>
-      <StatusBar style="light" />
-      <SafeAreaView style={styles.page}>
-        <View style={styles.topBar}>
-          <Pressable
-            onPress={() => setSidebarOpen(true)}
-            hitSlop={2}
-            style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Mở menu"
-            aria-expanded={sidebarOpen}
-          >
-            <MenuIcon size={22} />
-          </Pressable>
-        </View>
+    <DrawerScreen root>
+      {(menuButton) => (
+        <>
+          <StatusBar style="light" />
+          <SafeAreaView style={styles.page}>
+            <View style={[styles.topBar, { paddingTop: topBarSpace }]}>
+              {menuButton}
+            </View>
 
-        <View style={[styles.content, { paddingHorizontal: width >= WIDE_SCREEN ? 32 : 20 }]}>
-          <Text style={styles.greeting}>Xin chào, {user?.full_name}</Text>
-          <Text style={styles.subtitle}>Hôm nay bạn muốn làm video gì?</Text>
-        </View>
-      </SafeAreaView>
-    </PushDrawer>
+            <View style={[styles.content, { paddingHorizontal: width >= WIDE_SCREEN ? 32 : 20 }]}>
+              <Text style={styles.greeting}>Xin chào, {user?.full_name}</Text>
+              <Text style={styles.subtitle}>Hôm nay bạn muốn làm video gì?</Text>
+            </View>
+          </SafeAreaView>
+        </>
+      )}
+    </DrawerScreen>
   );
 }
 
@@ -51,20 +44,7 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    paddingVertical: 4,
-  },
-  menuButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 22,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.divider,
-    backgroundColor: colors.surface,
-  },
-  pressed: {
-    opacity: 0.7,
+    paddingBottom: 4,
   },
   content: {
     flex: 1,

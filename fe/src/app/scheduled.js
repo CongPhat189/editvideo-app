@@ -4,6 +4,7 @@ import { use, useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import DrawerScreen from '@/components/DrawerScreen';
 import { ChevronRightIcon } from '@/components/HomeIcons';
 import MonthCalendar, { toDayKey } from '@/components/MonthCalendar';
 import PageHeader from '@/components/PageHeader';
@@ -21,6 +22,14 @@ const DetailRow = ({ label, value }) => (
 );
 
 export default function Scheduled() {
+  return (
+    <DrawerScreen>
+      {(menuButton) => <ScheduledContent menuButton={menuButton} />}
+    </DrawerScreen>
+  );
+}
+
+function ScheduledContent({ menuButton }) {
   const [user] = use(MyUserContext);
   const token = user?.access_token;
   const [view, setView] = useState(() => {
@@ -82,7 +91,7 @@ export default function Scheduled() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
-      <PageHeader title="Đã lên lịch" />
+      <PageHeader title="Đã lên lịch" left={menuButton} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.page}>
           <MonthCalendar
@@ -135,7 +144,7 @@ export default function Scheduled() {
               <DetailRow label="Thời gian" value={formatScheduleTime(selected)} />
               <DetailRow label="Nội dung" value={selected.content || 'Không có nội dung'} />
               <Pressable
-                onPress={() => router.push(`/projects/${selected.conversation_id}`)}
+                onPress={() => router.replace(`/projects/${selected.conversation_id}`)}
                 disabled={!projectName}
                 style={({ pressed }) => [styles.projectRow, pressed && styles.pressed]}
                 accessibilityRole="button"
@@ -160,7 +169,7 @@ export default function Scheduled() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.backgroundDeep,
+    backgroundColor: colors.background,
   },
   content: {
     paddingHorizontal: 16,
@@ -208,7 +217,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingHorizontal: 16,
     borderRadius: 20,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
   },
   row: {
     flexDirection: 'row',
@@ -242,7 +251,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     padding: 16,
     borderRadius: 20,
-    backgroundColor: colors.background,
+    backgroundColor: colors.surface,
   },
   detailRow: {
     gap: 4,

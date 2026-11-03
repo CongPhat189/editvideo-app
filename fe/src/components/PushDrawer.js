@@ -23,8 +23,8 @@ export default function PushDrawer({ open, onClose, drawer, children }) {
   const { width } = useWindowDimensions();
   const drawerWidth = Math.min(width * WIDTH_RATIO, MAX_WIDTH);
   const reducedMotion = useReducedMotion();
-  const progress = useRef(new Animated.Value(0)).current;
-  const [mounted, setMounted] = useState(false);
+  const progress = useRef(new Animated.Value(open ? 1 : 0)).current;
+  const [mounted, setMounted] = useState(open);
 
   if (open && !mounted) setMounted(true);
 
