@@ -30,6 +30,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import (
+    ARRAY,
     JSONB,
     UUID,
 )
@@ -270,7 +271,10 @@ class Message(Base):
                                  Conversation.user_id == foreign(Message.user_id)),
         viewonly=True,
     )
-    attachments: Mapped[list["MessageAttachment"]] = relationship(back_populates="message", passive_deletes=True)
+    # selectin: API trả tin kèm file, async không tự tải quan hệ khi đọc thuộc tính được
+    attachments: Mapped[list["MessageAttachment"]] = relationship(
+        back_populates="message", passive_deletes=True, lazy="selectin", order_by="MessageAttachment.created_at"
+    )
 
 
 class MessageAttachment(Base):
@@ -332,6 +336,7 @@ class ScheduledTask(Base):
     task_name: Mapped[str] = mapped_column(String(255))
     task_type: Mapped[str] = mapped_column(String(50))
     payload: Mapped[dict] = mapped_column(JSONB)
+    platforms: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'"))  # Nền tảng cần đăng
     scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     timezone: Mapped[str] = mapped_column(String(100), server_default=text("'Asia/Ho_Chi_Minh'"))
     recurrence_rule: Mapped[str | None] = mapped_column(Text)  # RRULE (RFC 5545), NULL = chạy một lần

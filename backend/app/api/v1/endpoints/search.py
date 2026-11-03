@@ -20,7 +20,12 @@ async def search_messages(
     if "\x00" in q:
         return []
     rows = await session.execute(
-        text("select * from public.search_messages(:user_id, :q, :limit)"),
+        # Tin hệ thống gửi ngầm (metadata.hidden) không hiện trong khung chat nên cũng không được tìm thấy
+        text(
+            "select s.* from public.search_messages(:user_id, :q, :limit) s "
+            "join public.messages m on m.id = s.message_id "
+            "where not jsonb_exists(m.metadata, 'hidden')"
+        ),
         {"user_id": user.id, "q": q, "limit": limit},
     )
     return [SearchHit(**row) for row in rows.mappings()]

@@ -21,38 +21,40 @@ from tests.test_api import GENERAL, _conversation, _send
 
 
 @contextmanager
-def openai_mode(handler):
-    """GOCLAW_MODE=openai, mọi request HTTP tới GoClaw đi vào handler (không ra mạng)."""
+def live_mode(handler):
+    """GOCLAW_MODE=live, mọi request HTTP tới GoClaw đi vào handler (không ra mạng)."""
     real_client = httpx.AsyncClient
 
     def fake_client(**kwargs):
         return real_client(transport=httpx.MockTransport(handler), **kwargs)
 
-    with mock.patch.object(get_settings(), "goclaw_mode", "openai"), \
+    with mock.patch.object(get_settings(), "goclaw_mode", "live"), \
             mock.patch.object(goclaw.httpx, "AsyncClient", fake_client):
         yield
 
 
 def ok_reply(request: httpx.Request) -> httpx.Response:
     return httpx.Response(200, json={
-        "id": "chatcmpl-1", "model": "gpt-x",
-        "choices": [{"message": {"role": "assistant", "content": "Chào bạn!"}}],
+        "content": "Chào bạn!", "run_id": "run-1",
         "usage": {"prompt_tokens": 11, "completion_tokens": 3},
     })
 
 
-async def _set_agent(agent_id, *, key=None, domain="https://goclaw.test"):
-    await sql("update agents set key = :k, domain = :d where id = :i", k=key, d=domain, i=agent_id)
+async def _set_agent(agent_id, *, key=None, agent_key=None, domain="https://goclaw.test"):
+    await sql(
+        "update agents set api_key = :k, agent_key = :a, domain = :d where id = :i",
+        k=key, a=agent_key, d=domain, i=agent_id,
+    )
 
 
 async def _reset_agent(agent_id):
     await _set_agent(agent_id, domain="https://REPLACE_ME.goclaw.local")
 
 
-async def test_openai_request_shape_and_no_db_connection_held(agents):
+async def test_live_request_shape_and_no_db_connection_held(agents):
     user = await new_user()
     conv = await _conversation(user, agents[GENERAL])
-    await _set_agent(agents[GENERAL], key=encrypt_secret("sk-test-123"))
+    await _set_agent(agents[GENERAL], key=encrypt_secret("sk-test-123"), agent_key=encrypt_secret("facebook"))
     seen = {}
 
     def handler(request):
@@ -63,17 +65,17 @@ async def test_openai_request_shape_and_no_db_connection_held(agents):
         return ok_reply(request)
 
     try:
-        with openai_mode(handler):
+        with live_mode(handler):
             async with Client(user) as c:
                 r = await _send(c, conv["id"], "alo")
     finally:
         await _reset_agent(agents[GENERAL])
     am = r.json()["assistant_message"]
     assert (am["status"], am["content"]) == ("completed", "Chào bạn!")
-    assert am["metadata"] == {"model": "gpt-x", "input_tokens": 11, "output_tokens": 3}
-    assert seen["url"] == "https://goclaw.test/v1/chat/completions"
-    assert seen["body"]["model"] == "default"
-    assert seen["headers"]["x-openclaw-session-key"] == conv["id"]
+    assert am["metadata"] == {"input_tokens": 11, "output_tokens": 3}
+    assert seen["url"] == "https://goclaw.test/v1/agents/facebook/wake"
+    assert seen["body"] == {"message": "alo", "session_key": f"agent:facebook:app:direct:{conv['id']}"}
+    assert seen["headers"]["x-goclaw-user-id"] == str(user)
     assert seen["headers"]["authorization"] == "Bearer sk-test-123"  # đã giải mã trước khi gửi
     assert seen["db_connections_in_use"] == 0  # không giữ kết nối/transaction lúc chờ GoClaw
 
@@ -122,19 +124,22 @@ async def test_manage_set_password_changes_login():
 @pytest.mark.parametrize(
     "reply, status_expected",
     [
-        ({"choices": [{"message": {"content": [{"type": "text", "text": "phần 1 "}, {"type": "text", "text": "phần 2"}]}}]}, "completed"),
-        ({"choices": [{"message": {"content": "có\x00NUL"}}], "model": "m\x00", "id": "i\x00", "usage": "lạ"}, "completed"),
-        ({"choices": [{"message": {"content": "ok"}}], "usage": {"prompt_tokens": "nhiều", "completion_tokens": -1}}, "completed"),
+        ({"content": "có\x00NUL", "run_id": "i\x00", "usage": "lạ"}, "completed"),
+        ({"content": "ok", "usage": {"prompt_tokens": "nhiều", "completion_tokens": -1}}, "completed"),
         (["không phải object"], "failed"),
-        ({"choices": [{"message": {"content": 123}}]}, "failed"),
+        ({"content": 123}, "failed"),
     ],
 )
 async def test_odd_goclaw_replies_never_stick(agents, reply, status_expected):
     user = await new_user()
     conv = await _conversation(user, agents[GENERAL])
-    with openai_mode(lambda req: httpx.Response(200, json=reply)):
-        async with Client(user) as c:
-            r = await _send(c, conv["id"], "alo")
+    await _set_agent(agents[GENERAL], agent_key=encrypt_secret("facebook"))
+    try:
+        with live_mode(lambda req: httpx.Response(200, json=reply)):
+            async with Client(user) as c:
+                r = await _send(c, conv["id"], "alo")
+    finally:
+        await _reset_agent(agents[GENERAL])
     assert r.status_code == 201, r.text
     assert r.json()["assistant_message"]["status"] == status_expected
 
@@ -145,7 +150,7 @@ async def test_undecryptable_key_does_not_block_conversation(agents):
     conv = await _conversation(user, agents[GENERAL])
     await _set_agent(agents[GENERAL], key="khong-phai-ban-ma-hoa")
     try:
-        with openai_mode(ok_reply):
+        with live_mode(ok_reply):
             async with Client(user) as c:
                 r = await _send(c, conv["id"], "alo")
         assert r.status_code == 503
@@ -159,7 +164,7 @@ async def test_undecryptable_key_does_not_block_conversation(agents):
 async def test_goclaw_errors_do_not_leak_internal_url(agents):
     user = await new_user()
     conv = await _conversation(user, agents[GENERAL])
-    await _set_agent(agents[GENERAL], domain="http://10.0.0.5:8080")
+    await _set_agent(agents[GENERAL], agent_key=encrypt_secret("facebook"), domain="http://10.0.0.5:8080")
     cases = [
         lambda req: httpx.Response(401, json={"error": "bad key"}),
         lambda req: (_ for _ in ()).throw(httpx.ConnectError("connection refused to http://10.0.0.5:8080")),
@@ -167,7 +172,7 @@ async def test_goclaw_errors_do_not_leak_internal_url(agents):
     ]
     try:
         for handler in cases:
-            with openai_mode(handler):
+            with live_mode(handler):
                 async with Client(user) as c:
                     r = await _send(c, conv["id"], "alo")
             am = r.json()["assistant_message"]
@@ -212,7 +217,7 @@ async def test_schema_is_exactly_the_diagram():
         "message_attachments": {"id", "message_id", "file_name", "file_path", "file_url", "mime_type", "file_size",
                                 "created_at"},
         "scheduled_tasks": {"id", "user_id", "conversation_id", "agent_id", "task_name", "task_type", "payload",
-                            "scheduled_at", "timezone", "recurrence_rule", "status", "attempts", "max_attempts",
+                            "platforms", "scheduled_at", "timezone", "recurrence_rule", "status", "attempts", "max_attempts",
                             "next_retry_at", "last_error", "locked_by", "locked_at", "executed_at", "completed_at",
                             "created_at", "updated_at"},
         "scheduled_task_logs": {"id", "task_id", "attempt_number", "status", "request_payload", "response_payload",

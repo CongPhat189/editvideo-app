@@ -1,22 +1,33 @@
 """Gọi GoClaw để lấy câu trả lời của agent.
 
-Chưa có tài liệu API chính thức của GoClaw, nên client này giả định kiểu
-OpenAI-compatible giống OpenClaw gateway:
-  POST {agents.domain}/v1/chat/completions  {"model": <GOCLAW_DEFAULT_MODEL>, "messages": [...], "user": <user_id>}
-  header <GOCLAW_SESSION_HEADER>: <session key>  -> giữ ngữ cảnh hội thoại phía GoClaw
-Kiểm tra lại với GoClaw thật rồi chỉnh hàm _send_openai nếu khác.
+  POST {agents.domain}/v1/agents/{agent_key}/wake  {"message": ..., "session_key": ...}
+  Authorization: Bearer <api_key>
+  X-GoClaw-User-Id: <user_id>
+  -> {"content": ..., "run_id": ..., "usage": {"prompt_tokens": ..., "completion_tokens": ...}}
+
+Dùng /wake thay vì /v1/chat/completions vì chat/completions gộp mọi hội thoại của cùng user + agent
+vào một session, còn app cần mỗi conversation có ngữ cảnh riêng (session_key).
+
+Tin có file: /wake chỉ nhận văn bản, nên tải file lên POST /v1/media/upload rồi gửi chat.send qua WebSocket /ws,
+cùng session_key nên agent vẫn nhớ ngữ cảnh. Câu trả lời nằm trong frame res của chat.send.
 
 GOCLAW_MODE=mock trả lời giả, để chạy app khi chưa có GoClaw.
 """
 
 import asyncio
+import json
 import logging
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, BinaryIO
 from decimal import Decimal
+from urllib.parse import quote
 
 import httpx
+import websockets
+from websockets.exceptions import WebSocketException
 
 from app.core.config import SupabaseNotConfigured, get_settings, settings
 from app.core.crypto import SecretDecryptError, decrypt_secret
@@ -27,15 +38,29 @@ log = logging.getLogger(__name__)
 
 
 class GoClawError(Exception):
-    """Lỗi gọi GoClaw. Nội dung được hiển thị cho user nên KHÔNG chứa URL, key hay chi tiết nội bộ."""
+    """Lỗi gọi GoClaw. Nội dung được hiển thị cho user nên KHÔNG chứa URL, key hay chi tiết nội bộ.
+
+    retryable: chắc chắn GoClaw chưa xử lý tin, gửi lại không có nguy cơ agent làm hai lần.
+    """
+
+    def __init__(self, message: str, *, retryable: bool = False) -> None:
+        super().__init__(message)
+        self.retryable = retryable
 
 
 @dataclass(frozen=True)
 class GoClawTarget:
     agent_name: str
-    model: str
+    agent_key: str | None  # chỉ None ở chế độ mock
     base_url: str
     api_key: str | None
+
+
+@dataclass(frozen=True)
+class GoClawMedia:
+    filename: str
+    mime_type: str
+    file: BinaryIO
 
 
 @dataclass
@@ -52,15 +77,31 @@ class GoClawReply:
 def resolve_target(agent: Agent) -> GoClawTarget:
     """Gom thông tin của agent trước khi gọi GoClaw, để lúc chờ không cần đụng tới DB."""
     config = get_settings()
-    api_key = config.goclaw_api_key
-    raw_key = agent.api_key or getattr(agent, "key", None)
-    if config.goclaw_mode != "mock" and raw_key:
+    api_key, agent_key = config.goclaw_api_key, None
+    if config.goclaw_mode != "mock":
         try:
-            api_key = decrypt_secret(raw_key)
+            if agent.api_key:
+                api_key = decrypt_secret(agent.api_key)
+            if agent.agent_key:
+                agent_key = decrypt_secret(agent.agent_key)
         except (SecretDecryptError, SupabaseNotConfigured):
-            log.exception("Không giải mã được API key của agent %s", agent.id)
+            log.exception("Không giải mã được key của agent %s", agent.id)
             raise GoClawError("Chưa cấu hình xong kết nối tới agent")
-    return GoClawTarget(agent.name, config.goclaw_default_model, agent.domain, api_key)
+        if not agent_key:
+            raise GoClawError("Agent chưa được cấu hình agent_key của GoClaw")
+    return GoClawTarget(agent.name, agent_key, agent.domain, api_key)
+
+
+def session_key_for(target: GoClawTarget, conversation_id: uuid.UUID) -> str:
+    """Mỗi conversation một session bên GoClaw, theo định dạng agent:{agent}:{channel}:{kind}:{chat}."""
+    if target.agent_key is None:
+        return str(conversation_id)
+    return f"agent:{target.agent_key}:app:direct:{conversation_id}"
+
+
+def _base_url(domain: str) -> str:
+    domain = domain.strip().rstrip("/")
+    return domain if domain.startswith(("http://", "https://")) else f"https://{domain}"
 
 
 async def test_connection(
@@ -88,9 +129,7 @@ async def test_connection(
             },
         }
 
-    domain_clean = domain.strip().rstrip("/")
-    if not domain_clean.startswith(("http://", "https://")):
-        domain_clean = f"https://{domain_clean}"
+    domain_clean = _base_url(domain)
 
     headers: dict[str, str] = {}
     if api_key:
@@ -134,11 +173,14 @@ async def test_connection(
         }
 
 
-async def send_message(target: GoClawTarget, *, session_key: str, user_id: uuid.UUID, content: str) -> GoClawReply:
+async def send_message(
+    target: GoClawTarget, *, session_key: str, user_id: uuid.UUID, content: str, media: list[GoClawMedia] | None = None
+) -> GoClawReply:
     settings = get_settings()
     if settings.goclaw_mode == "mock":
+        files = f" kèm {len(media)} file" if media else ""
         return GoClawReply(
-            content=f"(mock {target.agent_name}) Mình đã nhận: {content}",
+            content=f"(mock {target.agent_name}) Mình đã nhận{files}: {content}",
             session_id=session_key,
             message_id=str(uuid.uuid4()),
             model="mock",
@@ -150,7 +192,9 @@ async def send_message(target: GoClawTarget, *, session_key: str, user_id: uuid.
         # Giới hạn TỔNG thời gian (httpx timeout chỉ tính từng giai đoạn), để không vượt quá
         # ngưỡng stale recovery trong api/v1/endpoints/conversations.py
         async with asyncio.timeout(settings.goclaw_timeout_seconds):
-            return await _send_openai(target, session_key=session_key, user_id=user_id, content=content)
+            if media:
+                return await _send_with_media(target, session_key=session_key, user_id=user_id, content=content, media=media)
+            return await _send_wake(target, session_key=session_key, user_id=user_id, content=content)
     except TimeoutError:
         raise GoClawError("Agent phản hồi quá lâu, vui lòng thử lại")
 
@@ -167,9 +211,7 @@ def _count(value: Any) -> int | None:
 
 def _parse_reply(data: dict[str, Any], session_key: str) -> GoClawReply:
     """Dữ liệu từ bên ngoài: dọn sạch trước khi ghi DB, sai định dạng thì ném ValueError."""
-    content = data["choices"][0]["message"]["content"]
-    if isinstance(content, list):  # dạng content parts của OpenAI
-        content = "".join(part["text"] for part in content if part.get("type") == "text")
+    content = data["content"]
     if content is not None and not isinstance(content, str):
         raise ValueError("content không phải chuỗi")
     usage = data.get("usage")
@@ -177,37 +219,100 @@ def _parse_reply(data: dict[str, Any], session_key: str) -> GoClawReply:
     return GoClawReply(
         content=_clean_text(content) or "",
         session_id=session_key,
-        message_id=_clean_text(data.get("id"), 255),
-        model=_clean_text(data.get("model"), 100),
+        message_id=_clean_text(data.get("run_id"), 255),
         input_tokens=_count(usage.get("prompt_tokens")),
         output_tokens=_count(usage.get("completion_tokens")),
     )
 
 
-async def _send_openai(target: GoClawTarget, *, session_key: str, user_id: uuid.UUID, content: str) -> GoClawReply:
-    settings = get_settings()
-    headers = {settings.goclaw_session_header: session_key}
+@contextmanager
+def _translate_errors(target: GoClawTarget) -> Iterator[None]:
+    """Đổi lỗi kết nối và dữ liệu lạ thành GoClawError, không để lộ URL hay chi tiết nội bộ cho user."""
+    try:
+        yield
+    except httpx.HTTPStatusError as e:
+        log.warning("GoClaw trả %s cho agent %s: %s", e.response.status_code, target.agent_key, e)
+        raise GoClawError(
+            f"Agent đang gặp lỗi (mã {e.response.status_code}), vui lòng thử lại",
+            retryable=e.response.status_code in (429, 503),
+        )
+    except (httpx.ConnectError, httpx.ConnectTimeout) as e:
+        log.warning("Không kết nối được GoClaw (agent %s): %s", target.agent_key, e)
+        raise GoClawError("Không kết nối được tới agent, vui lòng thử lại", retryable=True)
+    except httpx.TimeoutException as e:
+        log.warning("GoClaw timeout (agent %s): %s", target.agent_key, e)
+        raise GoClawError("Agent phản hồi quá lâu, vui lòng thử lại")
+    except (httpx.HTTPError, WebSocketException, OSError) as e:
+        log.warning("Không kết nối được GoClaw (agent %s): %s", target.agent_key, e)
+        raise GoClawError("Không kết nối được tới agent, vui lòng thử lại")
+    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as e:
+        log.warning("GoClaw trả dữ liệu không đúng định dạng (agent %s): %r", target.agent_key, e)
+        raise GoClawError("Agent trả về dữ liệu không đọc được")
+
+
+def _http_headers(target: GoClawTarget, user_id: uuid.UUID) -> dict[str, str]:
+    headers = {"X-GoClaw-User-Id": str(user_id)}
     if target.api_key:
         headers["Authorization"] = f"Bearer {target.api_key}"
-    body = {"model": target.model, "messages": [{"role": "user", "content": content}], "user": str(user_id)}
-    try:
+    return headers
+
+
+async def _send_wake(target: GoClawTarget, *, session_key: str, user_id: uuid.UUID, content: str) -> GoClawReply:
+    settings = get_settings()
+    url = f"{_base_url(target.base_url)}/v1/agents/{quote(target.agent_key or '', safe='')}/wake"
+    body = {"message": content, "session_key": session_key}
+    with _translate_errors(target):
         async with httpx.AsyncClient(timeout=settings.goclaw_timeout_seconds) as client:
-            resp = await client.post(f"{target.base_url.rstrip('/')}/v1/chat/completions", json=body, headers=headers)
+            resp = await client.post(url, json=body, headers=_http_headers(target, user_id))
             resp.raise_for_status()
             data = resp.json()
         return _parse_reply(data, session_key)
-    except httpx.HTTPStatusError as e:
-        log.warning("GoClaw trả %s cho agent %s: %s", e.response.status_code, target.model, e)
-        raise GoClawError(f"Agent đang gặp lỗi (mã {e.response.status_code}), vui lòng thử lại")
-    except httpx.TimeoutException as e:
-        log.warning("GoClaw timeout (agent %s): %s", target.model, e)
-        raise GoClawError("Agent phản hồi quá lâu, vui lòng thử lại")
-    except httpx.HTTPError as e:
-        log.warning("Không kết nối được GoClaw (agent %s): %s", target.model, e)
-        raise GoClawError("Không kết nối được tới agent, vui lòng thử lại")
-    except (AttributeError, KeyError, IndexError, TypeError, ValueError) as e:
-        log.warning("GoClaw trả dữ liệu không đúng định dạng (agent %s): %r", target.model, e)
-        raise GoClawError("Agent trả về dữ liệu không đọc được")
+
+
+async def _ws_request(ws, request_id: str, method: str, params: dict) -> dict:
+    """Gửi một request rồi đợi đúng frame res của nó. Bỏ qua các frame event (trạng thái, chữ đang gõ)."""
+    await ws.send(json.dumps({"type": "req", "id": request_id, "method": method, "params": params}))
+    while True:
+        frame = json.loads(await ws.recv())
+        if frame.get("type") != "res" or frame.get("id") != request_id:
+            continue
+        if not frame.get("ok"):
+            error = frame.get("error") or {}
+            log.warning("GoClaw từ chối %s: %s", method, error.get("code"))
+            raise GoClawError("Agent đang gặp lỗi, vui lòng thử lại")
+        return frame.get("payload") or {}
+
+
+async def _send_with_media(
+    target: GoClawTarget, *, session_key: str, user_id: uuid.UUID, content: str, media: list[GoClawMedia]
+) -> GoClawReply:
+    settings = get_settings()
+    base = _base_url(target.base_url)
+    with _translate_errors(target):
+        items = []
+        async with httpx.AsyncClient(timeout=settings.goclaw_timeout_seconds) as client:
+            for item in media:
+                item.file.seek(0)
+                resp = await client.post(
+                    f"{base}/v1/media/upload",
+                    files={"file": (item.filename, item.file, item.mime_type)},
+                    headers=_http_headers(target, user_id),
+                )
+                resp.raise_for_status()
+                items.append({"path": resp.json()["path"], "filename": item.filename})
+
+        ws_url = "ws" + base.removeprefix("http") + "/ws"
+        async with websockets.connect(ws_url, max_size=None, open_timeout=30) as ws:
+            await _ws_request(ws, "connect", "connect", {"token": target.api_key, "user_id": str(user_id)})
+            payload = await _ws_request(
+                ws,
+                "send",
+                "chat.send",
+                {"agentId": target.agent_key, "sessionKey": session_key, "message": content, "media": items},
+            )
+        return _parse_reply(
+            {"content": payload["content"], "run_id": payload.get("runId"), "usage": payload.get("usage")}, session_key
+        )
 
 
 class GoClawClient:

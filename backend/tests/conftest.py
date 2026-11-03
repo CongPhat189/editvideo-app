@@ -17,7 +17,7 @@ from cryptography.fernet import Fernet
 
 TEST_DB = os.environ.get("TEST_DATABASE_URL")
 # Không có Postgres test thì bỏ qua các test cần database. Luôn ghi đè DATABASE_URL để không bao giờ chạm Supabase thật.
-collect_ignore = [] if TEST_DB else ["test_api.py", "test_mobile_auth.py", "test_review_fixes.py"]
+collect_ignore = [] if TEST_DB else ["test_api.py", "test_mobile_auth.py", "test_review_fixes.py", "test_schedules.py", "test_attachments.py"]
 
 # Dùng DB tạm khi test, không đụng vào connector_screen.db thật
 _tmp = Path(tempfile.mkdtemp()) / "test.db"
@@ -35,9 +35,10 @@ os.environ.update(
     ALLOW_INTERNATIONAL_PHONES="false",
     GOCLAW_MODE="mock",
     GOCLAW_API_KEY="",
-    GOCLAW_SESSION_HEADER="x-openclaw-session-key",
-    GOCLAW_DEFAULT_MODEL="default",
     GOCLAW_TIMEOUT_SECONDS="30",
+    SCHEDULE_WORKER_ENABLED="false",
+    SUPABASE_URL="https://storage.invalid",
+    SUPABASE_SECRET_KEY="khoa-test",
 )
 
 import httpx  # noqa: E402

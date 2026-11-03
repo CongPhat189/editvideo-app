@@ -132,12 +132,21 @@ class ConversationOut(ORM):
     updated_at: datetime
 
 
+class AttachmentOut(ORM):
+    id: uuid.UUID
+    file_name: str
+    mime_type: str
+    file_size: int
+    url: str | None = Field(None, description="Đường dẫn xem file, hết hạn sau một giờ. Hết hạn thì tải lại tin nhắn")
+
+
 class MessageOut(ORM):
     id: uuid.UUID
     conversation_id: uuid.UUID
     role: str
     content: str | None
     content_type: str
+    attachments: list[AttachmentOut] = []
     status: str
     reply_to_message_id: uuid.UUID | None
     error_message: str | None
@@ -154,8 +163,9 @@ class MessagePage(BaseModel):
 
 class SendMessage(BaseModel):
     content: Content
-    # App tự sinh mỗi lần bấm gửi; gửi lại cùng key (mất mạng, bấm 2 lần) sẽ không tạo tin trùng
-    idempotency_key: uuid.UUID
+    # Không gửi thì server tự sinh, mỗi request là một tin mới.
+    # App muốn chống gửi trùng (mất mạng, bấm 2 lần) thì tự sinh key và gửi lại đúng key đó.
+    idempotency_key: uuid.UUID = Field(default_factory=uuid.uuid4)
 
 
 class SendMessageOut(BaseModel):

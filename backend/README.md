@@ -189,12 +189,30 @@ Mở http://localhost:4000/docs để thử API. Các API mobile (trừ `/health
 | `GET/POST /conversations` | danh sách (ghim trước, mới nhất trước) / tạo mới |
 | `GET/PATCH/DELETE /conversations/{id}` | xem, đổi tên, ghim, lưu trữ, xóa mềm |
 | `GET /conversations/{id}/messages?before=&limit=` | tin nhắn, mới nhất trước, phân trang theo `next_before` |
-| `POST /conversations/{id}/messages` | gửi tin `{content, idempotency_key}`, chờ agent trả lời |
+| `POST /conversations/{id}/messages` | gửi tin `{content, idempotency_key?}`, chờ agent trả lời |
+| `POST /conversations/{id}/messages/upload` | gửi tin kèm ảnh, video, file (`multipart/form-data`: `files`, `content?`, `idempotency_key?`) |
+| `POST /schedules` | đặt lịch trong cuộc trò chuyện `{conversation_id, scheduled_at, platforms?, content?, timezone?, task_name?}` |
+| `GET /schedules?status=` · `GET /schedules/{id}` | xem lịch và kết quả |
+| `DELETE /schedules/{id}` | hủy lịch chưa gửi |
 | `GET /search?q=` | tìm không dấu trong lịch sử chat |
 
-Gửi tin: app tự sinh `idempotency_key` (UUID) cho mỗi lần bấm gửi. Mất mạng gửi lại cùng key thì
-không tạo tin trùng. Mỗi cuộc trò chuyện chỉ một câu trả lời đang chạy; gửi chồng thì nhận `409`.
+Gửi tin: `idempotency_key` (UUID) là tùy chọn, không gửi thì server tự sinh và mỗi request là một tin mới.
+App muốn chống gửi trùng thì tự sinh key cho mỗi lần bấm gửi: mất mạng gửi lại cùng key thì không tạo tin trùng. Mỗi cuộc trò chuyện chỉ một câu trả lời đang chạy; gửi chồng thì nhận `409`.
 Mỗi user tối đa 20 tin/phút và 300 tin/giờ để không gọi AI vô hạn (`429`). Token, model, chi phí nằm trong `metadata` của tin.
+
+Gửi file: tối đa 5 file mỗi tin, mỗi file 50 MB. File lưu ở bucket riêng tư `chat-attachments` (cần `SUPABASE_URL`,
+`SUPABASE_SECRET_KEY`), `attachments[].url` của tin là đường dẫn có chữ ký, hết hạn sau một giờ. File gửi cho agent qua
+`POST /v1/media/upload` và WebSocket `chat.send` của GoClaw, cùng session với tin chữ nên agent vẫn nhớ ngữ cảnh.
+
+Đặt lịch: `scheduled_at` nhận `05/11/2026 20:00`, `2026-11-05T20:00` hoặc chỉ ngày; không kèm múi giờ thì hiểu theo `timezone`
+(mặc định `Asia/Ho_Chi_Minh`). Lịch luôn gắn với một cuộc trò chuyện. Không có `content` thì lưu lịch và gửi ngay trong nền tin
+`hẹn lịch đăng vào 05/11/2026 20:00` vào cuộc trò chuyện đó (chậm tối đa một chu kỳ `SCHEDULE_POLL_SECONDS`). Tin này có
+`metadata.hidden` nên không hiện trong khung chat và tìm kiếm, câu trả lời của agent thì vẫn hiện.
+`platforms` nhận một hoặc nhiều trong Facebook, YouTube, TikTok, Instagram, Website; có thì tin thành
+`hẹn lịch đăng lên Facebook, TikTok vào 05/11/2026 20:00`.
+Có `content` thì đến giờ, worker trong tiến trình API gửi tin (`app/services/schedule_worker.py`), tin và câu trả lời nằm trong cuộc trò chuyện đã chọn. Worker chỉ
+tự gửi lại khi chắc chắn GoClaw chưa nhận tin (không kết nối được, `429`, `503`) hoặc cuộc trò chuyện đang bận, tối đa 3 lần.
+Hết giờ chờ hay server dừng giữa chừng thì báo `failed`, không gửi lại, vì agent có thể đã làm xong (ví dụ đăng bài).
 
 ### Đăng ký, đăng nhập và JWT
 
@@ -238,18 +256,13 @@ Trước khi lên production:
 
 `GOCLAW_MODE=mock` (mặc định) trả lời giả để làm app trước. Khi có GoClaw thật:
 
-1. Đặt domain và API key cho từng agent (key nhập ẩn, được mã hóa bằng `AGENT_KEY_ENCRYPTION_KEY` trước khi lưu vào `agents.key`):
+1. Tạo agent qua `POST /agents` với `domain`, `api_key` (key `goclaw_...` có quyền `operator.write`) và `agent_key`
+   (mã agent trên trang Agents của GoClaw, vd `facebook`). Hai key được mã hóa bằng `AGENT_KEY_ENCRYPTION_KEY` trước khi lưu.
+2. Đặt `GOCLAW_MODE=live` rồi khởi động lại server.
 
-   ```bash
-   uv run python manage.py agent "Trợ lý chung" --domain https://goclaw.cua-ban.com --set-key
-   ```
-
-2. Đặt `GOCLAW_MODE=openai`.
-
-Client gọi `POST {agents.domain}/v1/chat/completions` với header `x-openclaw-session-key` = id cuộc trò chuyện. Đây là **giả định**
-theo kiểu OpenClaw (chưa tìm được tài liệu API của GoClaw). Bảng `agents` không có id agent bên GoClaw nên mọi agent gọi cùng
-`model = GOCLAW_DEFAULT_MODEL`; một domain chạy nhiều agent thì sẽ cần thêm cột. Kiểm tra với GoClaw thật rồi chỉnh
-`_send_openai` trong `app/integrations/goclaw.py` nếu khác.
+Client gọi `POST {agents.domain}/v1/agents/{agent_key}/wake` với `X-GoClaw-User-Id` = id user và `session_key` riêng cho từng
+cuộc trò chuyện. Không dùng `/v1/chat/completions` vì endpoint này gộp mọi hội thoại của cùng user + agent vào một session.
+Xem `app/integrations/goclaw.py`.
 
 ## 4. API demo `/api/*`
 
@@ -291,7 +304,8 @@ uv run pytest
 ## 6. Chưa làm
 
 - Xóa tài khoản `DELETE /me` (App Store yêu cầu với app có đăng ký). Tài khoản xóa mềm vẫn giữ số điện thoại vì `phone` là UNIQUE.
-- Upload file đính kèm và ảnh đại diện: bucket Storage còn đó nhưng đã bỏ policy, cần API upload qua backend.
+- Upload ảnh đại diện: bucket `avatars` còn đó nhưng đã bỏ policy, cần API upload qua backend.
+- Agent gửi file ngược lại trong câu trả lời (GoClaw có trả `media`, backend chưa lưu).
 - Job xóa hẳn cuộc trò chuyện đã xóa mềm.
 - Trả lời dạng streaming (hiện chờ trả lời xong mới trả về).
 - Worker chạy `scheduled_tasks` trên VPS (mới có bảng, chưa có code).
