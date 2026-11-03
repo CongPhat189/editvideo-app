@@ -7,6 +7,8 @@ import pytest
 from fastapi import HTTPException
 
 from app.api.v1.endpoints import agents as agents_ep
+from app.repositories import agent_repository
+from app.services import agent_service
 from app.core.crypto import SecretDecryptError, decrypt_secret, encrypt_secret
 from app.integrations import goclaw
 from app.models import Agent, AppUser
@@ -304,3 +306,54 @@ def test_test_saved_agent_connection_success():
     res = run_async(agents_ep.test_saved_agent_connection(agent_id, user=user, session=session))
     assert res.ok is True
     assert "Mock" in res.message
+
+
+# ==================== 4. 3-Tier Layer (Repository & Service) Tests ====================
+
+def test_agent_repository_crud():
+    session = AsyncMock()
+    agent_id = uuid.uuid4()
+    agent = Agent(id=agent_id, name="Direct Repo Agent", domain="https://repo.ai")
+
+    # Create
+    created = run_async(agent_repository.create(session, agent))
+    assert session.add.called
+    assert created.name == "Direct Repo Agent"
+
+    # Get by ID
+    session.get.return_value = agent
+    fetched = run_async(agent_repository.get_by_id(session, agent_id))
+    assert fetched.id == agent_id
+
+    # List by User
+    mock_scalars = MagicMock()
+    mock_scalars.all.return_value = [agent]
+    session.scalars.return_value = mock_scalars
+    user_agents = run_async(agent_repository.list_by_user(session, uuid.uuid4()))
+    assert len(user_agents) == 1
+
+    # Update
+    agent.name = "Updated Repo Agent"
+    updated = run_async(agent_repository.update(session, agent))
+    assert updated.name == "Updated Repo Agent"
+
+    # Delete
+    run_async(agent_repository.delete(session, agent))
+    assert session.delete.called
+
+
+def test_agent_service_delegation():
+    session = AsyncMock()
+    user_id = uuid.uuid4()
+
+    payload = AgentCreate(
+        name="Service Agent",
+        domain="https://service.goclaw.ai",
+        api_key="sk-service-key-1234",
+    )
+
+    out = run_async(agent_service.create_agent(session, user_id, payload))
+    assert out.name == "Service Agent"
+    assert out.user_id == user_id
+    assert out.has_api_key is True
+    assert "****" in out.masked_api_key
