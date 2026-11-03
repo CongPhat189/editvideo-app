@@ -1,17 +1,17 @@
 import uuid
-from datetime import datetime, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
-from sqlalchemy import DateTime, func, literal, select, tuple_, update
-from sqlalchemy.exc import DBAPIError, IntegrityError
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from sqlalchemy import func, not_, select, tuple_
+from sqlalchemy.exc import DBAPIError
+from starlette.datastructures import UploadFile
 
-from app.integrations import goclaw
+from app.integrations import goclaw, supabase_storage
 from app.api.supabase_deps import CurrentUser, Session
-from app.core.config import get_settings
 from app.core.errors import pg_error
 from app.core.rate_limit import limiter
 from app.models import Agent, Conversation, Message
+from app.services import attachment_service, chat_service
 from app.schemas.mobile import (
     ConversationCreate,
     ConversationOut,
@@ -123,8 +123,12 @@ async def list_messages(
 ):
     """Tin mới nhất trước. Trang tiếp theo: gửi before = next_before."""
     await _get_owned(session, user.id, conversation_id)
-    await _close_stale_replies(session, conversation_id)
-    query = select(Message).where(Message.conversation_id == conversation_id, Message.user_id == user.id)
+    await chat_service.close_stale_replies(session, conversation_id)
+    query = select(Message).where(
+        Message.conversation_id == conversation_id,
+        Message.user_id == user.id,
+        not_(Message.meta.has_key(chat_service.HIDDEN_KEY)),
+    )
     if before is not None:
         anchor = await session.scalar(
             select(Message.created_at).where(
@@ -135,25 +139,9 @@ async def list_messages(
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "before không thuộc cuộc trò chuyện này")
         query = query.where(tuple_(Message.created_at, Message.id) < (anchor, before))
     items = (await session.scalars(query.order_by(Message.created_at.desc(), Message.id.desc()).limit(limit))).all()
-    return MessagePage(items=items, next_before=items[-1].id if len(items) == limit else None)
-
-
-async def _close_stale_replies(session: Session, conversation_id: uuid.UUID) -> None:
-    """Câu trả lời kẹt quá lâu (server chết giữa chừng) -> đánh dấu lỗi, để app không chờ mãi và chat tiếp được."""
-    stale_after = timedelta(seconds=get_settings().goclaw_timeout_seconds + 60)
-    result = await session.execute(
-        update(Message)
-        .where(
-            Message.conversation_id == conversation_id,
-            Message.role == "assistant",
-            Message.status.in_(("pending", "processing")),
-            Message.created_at < func.now() - stale_after,
-        )
-        .values(status="failed", error_message="Hết thời gian chờ agent trả lời")
-        .execution_options(synchronize_session=False)
+    return MessagePage(
+        items=await attachment_service.to_out(items), next_before=items[-1].id if len(items) == limit else None
     )
-    if result.rowcount:
-        await session.commit()
 
 
 async def _reply_to(session: Session, message: Message) -> Message | None:
@@ -170,55 +158,38 @@ async def _existing_send(session: Session, user_id: uuid.UUID, key: uuid.UUID) -
     if sent is None:
         return None
     reply = await _reply_to(session, sent)
-    return SendMessageOut(
-        user_message=MessageOut.model_validate(sent),
-        assistant_message=MessageOut.model_validate(reply) if reply else None,
-    )
+    return _send_out(await attachment_service.to_out([sent, reply] if reply else [sent]))
 
 
-def _created_after(previous: datetime | None):
-    """Bảng messages không có cột số thứ tự, nên tin sau phải có created_at lớn hơn hẳn tin trước,
-    kể cả khi hai lần ghi rơi vào cùng một tick đồng hồ hoặc đồng hồ các server lệch nhau."""
+def _send_out(messages: list[MessageOut]) -> SendMessageOut:
+    return SendMessageOut(user_message=messages[0], assistant_message=messages[1] if len(messages) > 1 else None)
+
+
+async def _replay(
+    session: Session, response: Response, user_id: uuid.UUID, conversation_id: uuid.UUID, key: uuid.UUID
+) -> SendMessageOut | None:
+    previous = await _existing_send(session, user_id, key)
     if previous is None:
-        return func.clock_timestamp()
-    return func.greatest(func.clock_timestamp(), literal(previous + timedelta(microseconds=1), DateTime(timezone=True)))
-
-
-def _usage(result: goclaw.GoClawReply) -> dict:
-    usage = {
-        "model": result.model,
-        "input_tokens": result.input_tokens,
-        "output_tokens": result.output_tokens,
-        "cost_usd": str(result.cost_usd) if result.cost_usd is not None else None,
-    }
-    return {k: v for k, v in usage.items() if v is not None}
+        return None
+    if previous.user_message.conversation_id != conversation_id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "idempotency_key đã dùng cho cuộc trò chuyện khác")
+    response.status_code = status.HTTP_200_OK
+    return previous
 
 
 @router.post("/{conversation_id}/messages", response_model=SendMessageOut, status_code=status.HTTP_201_CREATED)
 async def send_message(
     conversation_id: uuid.UUID, body: SendMessage, user: CurrentUser, session: Session, response: Response
 ):
-    """Gửi tin và chờ agent trả lời.
-
-    1. Ghi tin của user + chỗ trống cho câu trả lời (status processing) rồi commit.
-    2. Gọi GoClaw (không giữ transaction trong lúc chờ).
-    3. Ghi câu trả lời (completed) hoặc lỗi (failed).
-    Gửi lại cùng idempotency_key -> trả lại kết quả cũ, không gọi GoClaw lần nữa.
-    """
+    """Gửi tin và chờ agent trả lời. Gửi lại cùng idempotency_key -> trả lại kết quả cũ, không gọi GoClaw lần nữa."""
     # Giữ id ra biến: sau rollback SQLAlchemy làm hết hạn các object đã load
     user_id = user.id
     conv = await _get_owned(session, user_id, conversation_id)
 
     async def replay() -> SendMessageOut | None:
-        previous = await _existing_send(session, user_id, body.idempotency_key)
-        if previous is None:
-            return None
-        if previous.user_message.conversation_id != conversation_id:
-            raise HTTPException(status.HTTP_409_CONFLICT, "idempotency_key đã dùng cho cuộc trò chuyện khác")
-        response.status_code = status.HTTP_200_OK
-        return previous
+        return await _replay(session, response, user_id, conversation_id, body.idempotency_key)
 
-    await _close_stale_replies(session, conv.id)
+    await chat_service.close_stale_replies(session, conv.id)
     if (previous := await replay()) is not None:
         return previous
 
@@ -233,84 +204,122 @@ async def send_message(
         target = goclaw.resolve_target(agent)
     except goclaw.GoClawError as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e))
-    session_key = conv.goclaw_session_id or str(conv.id)
-
-    user_msg = Message(
-        conversation_id=conv.id,
-        user_id=user_id,
-        role="user",
-        content=body.content,
-        status="completed",
-        idempotency_key=body.idempotency_key,
-        created_at=_created_after(conv.last_message_at),
-    )
-    session.add(user_msg)
     try:
-        await session.flush()
-        reply = Message(
-            conversation_id=conv.id,
-            user_id=user_id,
-            role="assistant",
-            status="processing",
-            reply_to_message_id=user_msg.id,
-            created_at=_created_after(user_msg.created_at),
+        sent = await chat_service.send_to_agent(
+            session, conv, target, user_id=user_id, content=body.content, idempotency_key=body.idempotency_key
         )
-        session.add(reply)
-        await session.commit()
-    except IntegrityError as e:
-        await session.rollback()
-        _, constraint = pg_error(e)
-        if constraint == "uq_messages_one_inflight_reply":
-            raise HTTPException(status.HTTP_409_CONFLICT, "Agent đang trả lời tin trước, đợi xong rồi gửi tiếp")
-        if constraint == "idx_messages_idempotency":  # 2 request cùng key chạy song song
-            if (previous := await replay()) is not None:
-                return previous
+    except chat_service.ReplyInFlight:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Agent đang trả lời tin trước, đợi xong rồi gửi tiếp")
+    except chat_service.DuplicateIdempotencyKey:
+        if (previous := await replay()) is not None:
+            return previous
         raise
+    return _send_out(await attachment_service.to_out([sent.user_message, sent.reply]))
 
-    # Lưu id ra biến: sau rollback các object bị hết hạn
-    reply_id, user_msg_id, conv_id = reply.id, user_msg.id, conv.id
-    finished = (Message.id == reply_id) & (Message.status == "processing")  # chưa bị stale recovery đóng
+
+def _upload_form_fields(form) -> tuple[str | None, uuid.UUID, list[UploadFile]]:
+    content = form.get("content")
+    if content is not None and not isinstance(content, str):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "content phải là chữ")
+    if content is not None and (len(content) > 20000 or "\x00" in content):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "content không hợp lệ")
+    raw_key = form.get("idempotency_key")
     try:
-        result = await goclaw.send_message(target, session_key=session_key, user_id=user_id, content=body.content)
-        await session.execute(
-            update(Message)
-            .where(finished)
-            .values(
-                status="completed",
-                content=result.content,
-                goclaw_message_id=result.message_id,
-                meta=_usage(result),
-            )
-            .execution_options(synchronize_session=False)
-        )
-        # Ghi có điều kiện ngay trong SQL: không đè tên/session do thiết bị khác vừa đặt
-        await session.execute(
-            update(Conversation)
-            .where(Conversation.id == conv_id)
-            .values(goclaw_session_id=func.coalesce(Conversation.goclaw_session_id, result.session_id))
-            .execution_options(synchronize_session=False)
-        )
-        await session.execute(
-            update(Conversation)
-            .where(Conversation.id == conv_id, Conversation.title.is_(None))
-            .values(title=body.content.strip()[:60])
-            .execution_options(synchronize_session=False)
-        )
-        await session.commit()
-    except Exception as e:
-        # Lỗi GoClaw, lỗi ghi kết quả hay lỗi ngoài dự kiến: vẫn đóng câu trả lời để user gửi tiếp được
-        await session.rollback()
-        message = str(e) if isinstance(e, goclaw.GoClawError) else "Lỗi hệ thống khi gọi agent"
-        await session.execute(
-            update(Message)
-            .where(finished)
-            .values(status="failed", error_message=message)
-            .execution_options(synchronize_session=False)
-        )
-        await session.commit()
-        if not isinstance(e, goclaw.GoClawError):
-            raise
+        key = uuid.UUID(raw_key) if raw_key else uuid.uuid4()
+    except (TypeError, ValueError, AttributeError):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "idempotency_key phải là UUID")
+    files = [item for item in form.getlist("files") if isinstance(item, UploadFile)]
+    return (content if content and content.strip() else None), key, files
 
-    user_msg = await session.get(Message, user_msg_id, populate_existing=True)
-    reply = await session.get(Message, reply_id, populate_existing=True)
-    return SendMessageOut(user_message=user_msg, assistant_message=reply)
+
+@router.post(
+    "/{conversation_id}/messages/upload",
+    response_model=SendMessageOut,
+    status_code=status.HTTP_201_CREATED,
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "multipart/form-data": {
+                    "schema": {
+                        "type": "object",
+                        "required": ["files"],
+                        "properties": {
+                            "files": {"type": "array", "items": {"type": "string", "format": "binary"}},
+                            "content": {"type": "string"},
+                            "idempotency_key": {"type": "string", "format": "uuid"},
+                        },
+                    }
+                }
+            },
+        }
+    },
+)
+async def send_message_with_files(
+    conversation_id: uuid.UUID, request: Request, user: CurrentUser, session: Session, response: Response
+):
+    """Gửi tin kèm ảnh, video, file (tối đa 5 file, mỗi file 50 MB) và chờ agent trả lời. content có thể bỏ trống."""
+    # Tự đọc form sau khi đã xác thực: khai báo File() thì FastAPI nhận cả file trước khi kiểm tra token
+    user_id = user.id
+    conv = await _get_owned(session, user_id, conversation_id)
+    limiter.hit(f"upload:{user_id}", 20, 60)
+    length = request.headers.get("content-length", "")
+    if not length.isdigit():
+        raise HTTPException(status.HTTP_411_LENGTH_REQUIRED, "Thiếu Content-Length")
+    if int(length) > attachment_service.MAX_REQUEST_BYTES:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "Tổng dung lượng file quá lớn")
+
+    async with request.form(max_files=attachment_service.MAX_FILES + 1, max_fields=5) as form:
+        content, key, uploads = _upload_form_fields(form)
+        files = attachment_service.validate(uploads)
+
+        await chat_service.close_stale_replies(session, conv.id)
+        if (previous := await _replay(session, response, user_id, conversation_id, key)) is not None:
+            return previous
+        limiter.hit(f"send:minute:{user_id}", 20, 60)
+        limiter.hit(f"send:hour:{user_id}", 300, 3600)
+
+        if conv.status != "active":
+            raise HTTPException(status.HTTP_409_CONFLICT, "Cuộc trò chuyện đã lưu trữ, bỏ lưu trữ để chat tiếp")
+        agent = await session.get(Agent, conv.agent_id)
+        try:
+            target = goclaw.resolve_target(agent)
+        except goclaw.GoClawError as e:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e))
+        # Kiểm tra trước để khỏi tải file lên rồi lại phải xóa
+        busy = await session.scalar(
+            select(Message.id)
+            .where(
+                Message.conversation_id == conv.id,
+                Message.role == "assistant",
+                Message.status.in_(("pending", "processing")),
+            )
+            .limit(1)
+        )
+        if busy is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Agent đang trả lời tin trước, đợi xong rồi gửi tiếp")
+
+        await session.commit()  # Không giữ transaction trong lúc tải file lên
+        await attachment_service.store(files, user_id=user_id, conversation_id=conversation_id)
+        try:
+            sent = await chat_service.send_to_agent(
+                session,
+                conv,
+                target,
+                user_id=user_id,
+                content=content,
+                idempotency_key=key,
+                content_type=attachment_service.content_type_of(files),
+                attachments=[f.row() for f in files],
+                media=[f.media() for f in files],
+                title=files[0].file_name,
+            )
+        except chat_service.ReplyInFlight:
+            await supabase_storage.delete([f.file_path for f in files])
+            raise HTTPException(status.HTTP_409_CONFLICT, "Agent đang trả lời tin trước, đợi xong rồi gửi tiếp")
+        except chat_service.DuplicateIdempotencyKey:
+            await supabase_storage.delete([f.file_path for f in files])
+            if (previous := await _replay(session, response, user_id, conversation_id, key)) is not None:
+                return previous
+            raise
+        return _send_out(await attachment_service.to_out([sent.user_message, sent.reply]))

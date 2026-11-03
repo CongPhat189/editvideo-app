@@ -78,12 +78,19 @@ class SupabaseSettings(BaseSettings):
     # Mặc định chỉ nhận số Việt Nam
     allow_international_phones: bool = False
 
-    # mock: trả lời giả, để chạy app khi chưa có GoClaw. openai: gọi /v1/chat/completions.
-    goclaw_mode: Literal["mock", "openai"] = "mock"
+    # mock: trả lời giả, để chạy app khi chưa có GoClaw. live: gọi GoClaw thật (/v1/agents/{agent_key}/wake).
+    goclaw_mode: Literal["mock", "live"] = "mock"
     goclaw_api_key: str | None = None       # dự phòng khi agent chưa có key
-    goclaw_default_model: str = "default"   # bảng agents không có id agent bên GoClaw, nên dùng chung một model
-    goclaw_session_header: str = "x-openclaw-session-key"
     goclaw_timeout_seconds: float = 120
+
+    # Lưu file đính kèm trên Supabase Storage (cần secret key, vì bucket không có policy cho client)
+    supabase_url: str | None = None
+    supabase_secret_key: str | None = None
+    attachment_bucket: str = "chat-attachments"
+
+    # Worker gửi tin đặt lịch, chạy cùng tiến trình API
+    schedule_worker_enabled: bool = True
+    schedule_poll_seconds: float = 15
 
     @property
     def sqlalchemy_url(self) -> URL:

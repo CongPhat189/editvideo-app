@@ -161,6 +161,17 @@ async def test_cannot_touch_other_users_data(agents):
 
 
 # ---------------------------------------------------------------- chat
+async def test_send_without_idempotency_key_creates_new_message_each_time(agents):
+    user = await new_user()
+    conv = await _conversation(user, agents[GENERAL])
+    url = f"/conversations/{conv['id']}/messages"
+    async with Client(user) as c:
+        first = await c.post(url, json={"content": "giống nhau"})
+        second = await c.post(url, json={"content": "giống nhau"})
+    assert (first.status_code, second.status_code) == (201, 201), first.text
+    assert first.json()["user_message"]["id"] != second.json()["user_message"]["id"]
+
+
 async def test_send_message_flow(agents):
     user = await new_user()
     conv = await _conversation(user, agents[GENERAL])
