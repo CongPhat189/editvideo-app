@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   drawerLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.backgroundDeep,
   },
   drawer: {
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.overlay,
   },
 });

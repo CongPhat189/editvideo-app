@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { use } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { PhoneIcon } from '@/components/AuthIcons';
 import {
@@ -59,6 +59,7 @@ const SettingsCard = ({ rows }) => (
 
 export default function Settings() {
   const [user] = use(MyUserContext);
+  const insets = useSafeAreaInsets();
   const topBarSpace = useTopBarSpace();
 
   const close = () => {
@@ -74,7 +75,13 @@ export default function Settings() {
   ];
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+    // Màn hình toàn trang trên iOS: SafeAreaView không tự chừa vùng tai thỏ nên dùng thẳng số đo
+    <View
+      style={[
+        styles.container,
+        { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right },
+      ]}
+    >
       <StatusBar style="light" />
       <View style={[styles.header, { paddingTop: topBarSpace }]}>
         <Pressable
@@ -131,7 +138,7 @@ export default function Settings() {
           <SettingsCard rows={accountRows} />
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
