@@ -23,6 +23,13 @@ async def list_by_user(session: AsyncSession, user_id: uuid.UUID) -> list[Agent]
     return list(result.all())
 
 
+async def get_by_user_id(session: AsyncSession, user_id: uuid.UUID) -> list[Agent]:
+    """Lấy danh sách các agent thuộc riêng về một user_id cụ thể."""
+    query = select(Agent).where(Agent.user_id == user_id).order_by(Agent.name)
+    result = await session.scalars(query)
+    return list(result.all())
+
+
 async def create(session: AsyncSession, agent: Agent) -> Agent:
     """Thêm agent mới vào database."""
     session.add(agent)
@@ -42,3 +49,4 @@ async def delete(session: AsyncSession, agent: Agent) -> None:
     """Xóa agent khỏi database."""
     await session.delete(agent)
     await session.commit()
+

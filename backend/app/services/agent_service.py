@@ -11,7 +11,7 @@ from app.core.crypto import decrypt_secret, encrypt_secret
 from app.integrations.goclaw import test_connection as goclaw_test_conn
 from app.models import Agent
 from app.repositories import agent_repository
-from app.schemas.mobile import (
+from app.schemas.agent import (
     AgentCreate,
     AgentDetailOut,
     AgentOut,
@@ -54,6 +54,12 @@ async def list_agents(session: AsyncSession, user_id: uuid.UUID) -> list[AgentOu
     """Lấy danh sách agent cho người dùng."""
     agents = await agent_repository.list_by_user(session, user_id)
     return [AgentOut.model_validate(a) for a in agents]
+
+
+async def list_agents_by_user_id(session: AsyncSession, user_id: uuid.UUID) -> list[AgentDetailOut]:
+    """Lấy danh sách chi tiết các agent thuộc riêng về một user_id (kèm thông tin domain, key đã che mờ)."""
+    agents = await agent_repository.get_by_user_id(session, user_id)
+    return [to_detail_out(a) for a in agents]
 
 
 async def create_agent(session: AsyncSession, user_id: uuid.UUID, payload: AgentCreate) -> AgentDetailOut:
@@ -165,3 +171,4 @@ async def test_saved_agent_connection(
         agent_key=plain_agent_key,
     )
     return AgentTestConnectionOut(**result)
+

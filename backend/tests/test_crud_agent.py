@@ -12,7 +12,7 @@ from app.services import agent_service
 from app.core.crypto import SecretDecryptError, decrypt_secret, encrypt_secret
 from app.integrations import goclaw
 from app.models import Agent, AppUser
-from app.schemas.mobile import (
+from app.schemas.agent import (
     AgentCreate,
     AgentDetailOut,
     AgentOut,
@@ -357,3 +357,59 @@ def test_agent_service_delegation():
     assert out.user_id == user_id
     assert out.has_api_key is True
     assert "****" in out.masked_api_key
+
+
+def test_list_agents_by_user_id():
+    user_id = uuid.uuid4()
+    agent1 = Agent(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        name="User Agent 1",
+        domain="https://agent1.goclaw.ai",
+        api_key=encrypt_secret("sk-key-1111"),
+        agent_key=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    agent2 = Agent(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        name="User Agent 2",
+        domain="https://agent2.goclaw.ai",
+        api_key=None,
+        agent_key=encrypt_secret("sk-agent-2222"),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+
+    session = AsyncMock()
+    mock_scalars = MagicMock()
+    mock_scalars.all.return_value = [agent1, agent2]
+    session.scalars.return_value = mock_scalars
+
+    # 1. Test repository get_by_user_id
+    repo_results = run_async(agent_repository.get_by_user_id(session, user_id))
+    assert len(repo_results) == 2
+    assert repo_results[0].name == "User Agent 1"
+    assert repo_results[1].name == "User Agent 2"
+
+    # 2. Test service list_agents_by_user_id
+    service_results = run_async(agent_service.list_agents_by_user_id(session, user_id))
+    assert len(service_results) == 2
+    assert isinstance(service_results[0], AgentDetailOut)
+    assert service_results[0].user_id == user_id
+    assert service_results[0].has_api_key is True
+    assert service_results[0].has_agent_key is False
+    assert service_results[1].has_api_key is False
+    assert service_results[1].has_agent_key is True
+
+    # 3. Test endpoint list_agents_by_user (GET /agents/user/{user_id})
+    user = AppUser(id=user_id, full_name="Hiếu", phone="+84900000001", status="active")
+    ep_results = run_async(agents_ep.list_agents_by_user(user_id=user_id, user=user, session=session))
+    assert len(ep_results) == 2
+    assert ep_results[0].name == "User Agent 1"
+    assert ep_results[1].name == "User Agent 2"
+
+    # 4. Test endpoint list_agents with query param user_id (GET /agents?user_id=...)
+    ep_query_results = run_async(agents_ep.list_agents(user=user, session=session, user_id=user_id))
+    assert len(ep_query_results) == 2

@@ -92,48 +92,21 @@ class SettingsUpdate(BaseModel):
     settings_json: Annotated[dict, AfterValidator(_settings_json)] | None = None
 
 
-class AgentOut(ORM):
-    id: uuid.UUID
-    name: str
-
-
-class AgentCreate(BaseModel):
-    name: Name
-    domain: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255), AfterValidator(_no_nul)]
-    api_key: str | None = None
-    agent_key: str | None = None
-
-
-class AgentUpdate(BaseModel):
-    name: Name | None = None
-    domain: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=255), AfterValidator(_no_nul)] | None = None
-    api_key: str | None = None
-    agent_key: str | None = None
-
-
-class AgentDetailOut(ORM):
-    id: uuid.UUID
-    user_id: uuid.UUID | None = None
-    name: str
-    domain: str
-    has_api_key: bool = False
-    has_agent_key: bool = False
-    masked_api_key: str | None = None
-    masked_agent_key: str | None = None
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-
-
-class AgentTestConnectionIn(BaseModel):
-    domain: str | None = None
-    api_key: str | None = None
-    agent_key: str | None = None
-
-
-class AgentTestConnectionOut(BaseModel):
-    ok: bool
-    message: str
-    details: dict | None = None
+# ==================== Agent Schemas (Đã tách riêng tại app/schemas/agent.py) ====================
+from app.schemas.agent import (
+    AgentCreate,
+    AgentCreateRequest,
+    AgentDetailOut,
+    AgentDetailResponse,
+    AgentListResponse,
+    AgentOut,
+    AgentTestConnectionIn,
+    AgentTestConnectionOut,
+    AgentTestConnectionRequest,
+    AgentTestConnectionResponse,
+    AgentUpdate,
+    AgentUpdateRequest,
+)
 
 
 class ConversationCreate(BaseModel):
