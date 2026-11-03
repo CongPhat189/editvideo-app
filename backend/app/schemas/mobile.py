@@ -92,9 +92,21 @@ class SettingsUpdate(BaseModel):
     settings_json: Annotated[dict, AfterValidator(_settings_json)] | None = None
 
 
-class AgentOut(ORM):
-    id: uuid.UUID
-    name: str
+# ==================== Agent Schemas (Đã tách riêng tại app/schemas/agent.py) ====================
+from app.schemas.agent import (
+    AgentCreate,
+    AgentCreateRequest,
+    AgentDetailOut,
+    AgentDetailResponse,
+    AgentListResponse,
+    AgentOut,
+    AgentTestConnectionIn,
+    AgentTestConnectionOut,
+    AgentTestConnectionRequest,
+    AgentTestConnectionResponse,
+    AgentUpdate,
+    AgentUpdateRequest,
+)
 
 
 class ConversationCreate(BaseModel):
@@ -193,3 +205,87 @@ class TokenOut(BaseModel):
     expires_in: int = Field(description="Số giây access token còn hiệu lực")
     expires_at: int = Field(description="Thời điểm access token hết hạn (Unix time)")
     user: AuthUser
+
+
+# ==================== Scheduled Tasks (Lịch hẹn / Lịch đăng bài) ====================
+
+TaskType = Literal["send_message", "execute_agent", "execute_workflow", "publish_post"]
+TaskStatus = Literal["scheduled", "processing", "completed", "failed", "cancelled", "retrying"]
+
+
+class ScheduledTaskCreate(BaseModel):
+    task_name: Name
+    task_type: TaskType
+    agent_id: uuid.UUID | None = None
+    conversation_id: uuid.UUID | None = None
+    payload: dict = Field(default_factory=dict)
+    scheduled_at: datetime
+    timezone: Annotated[str, Field(max_length=100), AfterValidator(_no_nul)] = "Asia/Ho_Chi_Minh"
+    recurrence_rule: Annotated[str, Field(max_length=255), AfterValidator(_no_nul)] | None = None
+    max_attempts: int = Field(default=3, ge=1, le=10)
+
+
+class ScheduledTaskUpdate(BaseModel):
+    task_name: Name | None = None
+    task_type: TaskType | None = None
+    agent_id: uuid.UUID | None = None
+    conversation_id: uuid.UUID | None = None
+    payload: dict | None = None
+    scheduled_at: datetime | None = None
+    timezone: Annotated[str, Field(max_length=100), AfterValidator(_no_nul)] | None = None
+    recurrence_rule: Annotated[str, Field(max_length=255), AfterValidator(_no_nul)] | None = None
+    status: Literal["scheduled", "cancelled"] | None = None
+
+
+class ScheduledTaskLogOut(ORM):
+    id: uuid.UUID
+    task_id: uuid.UUID
+    attempt_number: int
+    status: str
+    request_payload: dict | None = None
+    response_payload: dict | None = None
+    error_message: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    created_at: datetime
+
+
+class ScheduledTaskOut(ORM):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    conversation_id: uuid.UUID | None = None
+    agent_id: uuid.UUID | None = None
+    task_name: str
+    task_type: str
+    payload: dict
+    scheduled_at: datetime
+    timezone: str
+    recurrence_rule: str | None = None
+    status: str
+    attempts: int
+    max_attempts: int
+    next_retry_at: datetime | None = None
+    last_error: str | None = None
+    executed_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ScheduledTaskDetailOut(ScheduledTaskOut):
+    logs: list[ScheduledTaskLogOut] = []
+
+
+class ScheduledTaskPage(BaseModel):
+    items: list[ScheduledTaskOut]
+    total: int
+    limit: int
+    offset: int
+
+
+class ScheduledTaskExecuteOut(BaseModel):
+    task_id: uuid.UUID
+    status: str
+    attempt_number: int
+    result: dict | None = None
+    error: str | None = None

@@ -12,3 +12,4 @@ class ConnectorPayload(BaseModel):
     base_url: str | None = None
     project_id: str | None = None
     config_json: dict | None = None
+

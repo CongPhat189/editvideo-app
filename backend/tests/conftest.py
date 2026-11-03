@@ -4,6 +4,7 @@
     pytest             # chỉ test không cần Postgres
 """
 
+import asyncio
 import os
 import tempfile
 import time
@@ -117,8 +118,8 @@ class Client(httpx.AsyncClient):
 
 
 @pytest.fixture(scope="session")
-async def agents():
-    rows = await sql("select id, name from agents")
+def agents():
+    rows = asyncio.run(sql("select id, name from agents"))
     return {r["name"]: r["id"] for r in rows}
 
 
@@ -128,6 +129,9 @@ def _reset_rate_limits():
 
 
 @pytest.fixture(autouse=True, scope="session")
-async def _dispose():
+def _dispose():
     yield
-    await get_engine().dispose()
+    try:
+        asyncio.run(get_engine().dispose())
+    except Exception:
+        pass
