@@ -103,6 +103,7 @@ class AppUser(Base):
     settings: Mapped["UserSetting"] = relationship(back_populates="user", uselist=False, passive_deletes=True)
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="user", passive_deletes=True)
     scheduled_tasks: Mapped[list["ScheduledTask"]] = relationship(back_populates="user", passive_deletes=True)
+    agents: Mapped[list["Agent"]] = relationship(back_populates="user", passive_deletes=True)
 
 
 class UserSetting(Base):
@@ -132,12 +133,15 @@ class Agent(Base):
     __tablename__ = "agents"
 
     id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True)
     name: Mapped[str] = mapped_column(String(150))
     api_key: Mapped[str | None] = mapped_column(Text)  # API key đã mã hóa (app/core/crypto.py), không lưu bản gốc
     agent_key: Mapped[str | None] = mapped_column(Text)  # agent_key đã mã hóa (app/core/crypto.py), không lưu bản gốc
     domain: Mapped[str] = mapped_column(String(255))  # vd https://goclaw.abc.com
     created_at: Mapped[datetime] = created_at()
     updated_at: Mapped[datetime] = updated_at()
+
+    user: Mapped[AppUser | None] = relationship(back_populates="agents")
 
 
 # ==================== Supabase - Chat ====================

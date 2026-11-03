@@ -113,6 +113,7 @@ class AgentUpdate(BaseModel):
 
 class AgentDetailOut(ORM):
     id: uuid.UUID
+    user_id: uuid.UUID | None = None
     name: str
     domain: str
     has_api_key: bool = False

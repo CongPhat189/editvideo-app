@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import uuid
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.api.supabase_deps import CurrentUser, Session
 from app.core.crypto import decrypt_secret, encrypt_secret
@@ -34,6 +34,7 @@ def _mask_key(secret: str | None) -> str | None:
 def _to_detail_out(agent: Agent) -> AgentDetailOut:
     return AgentDetailOut(
         id=agent.id,
+        user_id=getattr(agent, "user_id", None),
         name=agent.name,
         domain=agent.domain,
         has_api_key=bool(agent.api_key),
@@ -48,7 +49,12 @@ def _to_detail_out(agent: Agent) -> AgentDetailOut:
 @router.get("", response_model=list[AgentOut])
 async def list_agents(user: CurrentUser, session: Session):
     """Danh sách agent. Chỉ trả id và name cho app."""
-    return (await session.scalars(select(Agent).order_by(Agent.name))).all()
+    query = (
+        select(Agent)
+        .where(or_(Agent.user_id == user.id, Agent.user_id.is_(None)))
+        .order_by(Agent.name)
+    )
+    return (await session.scalars(query)).all()
 
 
 @router.post("", response_model=AgentDetailOut, status_code=status.HTTP_201_CREATED)
@@ -60,6 +66,7 @@ async def create_agent(payload: AgentCreate, user: CurrentUser, session: Session
     now = datetime.now(timezone.utc)
     agent = Agent(
         id=uuid.uuid4(),
+        user_id=user.id,
         name=payload.name,
         domain=payload.domain,
         api_key=encrypted_api_key,
