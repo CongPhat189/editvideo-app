@@ -14,23 +14,37 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { MessageAttachments, PendingAttachments } from '@/components/ChatAttachments';
 import DrawerScreen from '@/components/DrawerScreen';
-import { CalendarIcon, SendIcon } from '@/components/HomeIcons';
+import { CalendarIcon, PlusIcon, SendIcon } from '@/components/HomeIcons';
 import PageHeader from '@/components/PageHeader';
 import { MyUserContext } from '@/config/Contexts';
 import { colors } from '@/constants/theme';
+import { MAX_FILES, pickMedia } from '@/services/attachments';
 import { getErrorMessage } from '@/services/auth';
-import { getMessages, getProject, markProjectOpened, sendMessage } from '@/services/projects';
+import {
+  getMessages,
+  getProject,
+  markProjectOpened,
+  sendMessage,
+  sendMessageWithFiles,
+} from '@/services/projects';
 
 const POLL_INTERVAL = 3000;
 const MAX_MESSAGE_LENGTH = 20000;
 const IN_PROGRESS = ['pending', 'processing'];
 
 const MessageBubble = ({ message }) => {
+  const attachments = message.attachments ?? [];
   if (message.role === 'user') {
     return (
-      <View style={styles.userBubble}>
-        <Text style={styles.messageText} selectable>{message.content}</Text>
+      <View style={styles.userMessage}>
+        {attachments.length > 0 ? <MessageAttachments attachments={attachments} align="flex-end" /> : null}
+        {message.content ? (
+          <View style={styles.userBubble}>
+            <Text style={styles.messageText} selectable>{message.content}</Text>
+          </View>
+        ) : null}
       </View>
     );
   }
@@ -45,7 +59,12 @@ const MessageBubble = ({ message }) => {
   if (message.status === 'failed') {
     return <Text style={styles.failedText}>{message.error_message || 'Agent không trả lời được'}</Text>;
   }
-  return <Text style={[styles.messageText, styles.replyText]} selectable>{message.content}</Text>;
+  return (
+    <View style={styles.replyMessage}>
+      {attachments.length > 0 ? <MessageAttachments attachments={attachments} /> : null}
+      {message.content ? <Text style={styles.messageText} selectable>{message.content}</Text> : null}
+    </View>
+  );
 };
 
 export default function ProjectChat() {
@@ -67,6 +86,7 @@ function ChatContent({ id, menuButton }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [text, setText] = useState('');
+  const [files, setFiles] = useState([]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const loadingOlder = useRef(false);
@@ -121,18 +141,52 @@ function ChatContent({ id, menuButton }) {
     }
   };
 
+  const handlePickFiles = async () => {
+    const remaining = MAX_FILES - files.length;
+    if (remaining <= 0) {
+      setSendError(`Mỗi tin gửi tối đa ${MAX_FILES} file`);
+      return;
+    }
+    setSendError('');
+    try {
+      const picked = await pickMedia(remaining);
+      setFiles((current) => {
+        const newFiles = picked.files.filter((file) => !current.some((item) => item.uri === file.uri));
+        return [...current, ...newFiles];
+      });
+      if (picked.error) setSendError(picked.error);
+    } catch {
+      setSendError('Không mở được thư viện ảnh');
+    }
+  };
+
   const handleSend = async () => {
     const content = text.trim();
-    if (!content || sending) return;
+    if ((!content && files.length === 0) || sending) return;
 
-    const localUserMessage = { id: 'local-user', role: 'user', content, status: 'completed' };
+    const sentFiles = files;
+    const localUserMessage = {
+      id: 'local-user',
+      role: 'user',
+      content,
+      status: 'completed',
+      attachments: sentFiles.map((file) => ({
+        id: file.uri,
+        file_name: file.fileName,
+        mime_type: file.mimeType,
+        url: file.uri,
+      })),
+    };
     const localReply = { id: 'local-reply', role: 'assistant', status: 'processing' };
     setMessages((current) => [localReply, localUserMessage, ...current]);
     setText('');
+    setFiles([]);
     setSendError('');
     setSending(true);
     try {
-      const result = await sendMessage(token, id, content);
+      const result = sentFiles.length > 0
+        ? await sendMessageWithFiles(token, id, content, sentFiles)
+        : await sendMessage(token, id, content);
       setMessages((current) => [
         ...(result.assistant_message ? [result.assistant_message] : []),
         result.user_message,
@@ -141,13 +195,14 @@ function ChatContent({ id, menuButton }) {
     } catch (error) {
       setMessages((current) => current.filter((message) => !message.id.startsWith('local-')));
       setText(content);
+      setFiles(sentFiles);
       setSendError(getErrorMessage(error));
     } finally {
       setSending(false);
     }
   };
 
-  const canSend = text.trim().length > 0 && !sending;
+  const canSend = (text.trim().length > 0 || files.length > 0) && !sending;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -187,7 +242,23 @@ function ChatContent({ id, menuButton }) {
         ) : null}
 
         {sendError ? <Text style={styles.sendError}>{sendError}</Text> : null}
+        {files.length > 0 ? (
+          <View>
+            <PendingAttachments
+              files={files}
+              onRemove={(uri) => setFiles((current) => current.filter((file) => file.uri !== uri))}
+            />
+          </View>
+        ) : null}
         <View style={styles.composer}>
+          <Pressable
+            onPress={handlePickFiles}
+            style={({ pressed }) => [styles.scheduleButton, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Thêm ảnh hoặc video"
+          >
+            <PlusIcon size={22} />
+          </Pressable>
           <Pressable
             onPress={() => router.push(`/projects/${id}/schedule`)}
             style={({ pressed }) => [styles.scheduleButton, pressed && styles.pressed]}
@@ -251,8 +322,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
+  userMessage: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  replyMessage: {
+    alignItems: 'flex-start',
+    gap: 8,
+  },
   userBubble: {
-    alignSelf: 'flex-end',
     maxWidth: '85%',
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -263,9 +341,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 16,
     lineHeight: 24,
-  },
-  replyText: {
-    alignSelf: 'flex-start',
   },
   replyPending: {
     flexDirection: 'row',

@@ -1,9 +1,19 @@
-import { router, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { use, useCallback, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  LayoutAnimation,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import AgentForm from '@/components/AgentForm';
 import AuthButton from '@/components/AuthButton';
 import DrawerScreen from '@/components/DrawerScreen';
 import { AgentIcon } from '@/components/HomeIcons';
@@ -26,52 +36,78 @@ function AgentsContent({ menuButton }) {
   const token = user?.access_token;
   const [agents, setAgents] = useState(null);
   const [error, setError] = useState('');
+  const [formOpen, setFormOpen] = useState(false);
 
-  // Tải lại khi quay về từ form thêm Agent
+  const loadAgents = useCallback(async () => {
+    if (!token) return;
+    try {
+      setAgents(await getAgents(token));
+      setError('');
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }, [token]);
+
   useFocusEffect(
     useCallback(() => {
-      if (!token) return undefined;
-      let active = true;
-      getAgents(token)
-        .then((items) => {
-          if (!active) return;
-          setAgents(items);
-          setError('');
-        })
-        .catch((err) => {
-          if (active) setError(getErrorMessage(err));
-        });
-      return () => {
-        active = false;
-      };
-    }, [token])
+      loadAgents();
+    }, [loadAgents])
   );
+
+  const toggleForm = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setFormOpen((open) => !open);
+  };
+
+  const handleSaved = async () => {
+    await loadAgents();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setFormOpen(false);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
       <PageHeader title="Agent" left={menuButton} />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.page}>
-          <AuthButton title="+ Thêm Agent" onPress={() => router.push('/agents/new')} />
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-          {agents === null && !error ? <ActivityIndicator color={colors.text} style={styles.loading} /> : null}
-          {agents?.length === 0 ? <Text style={styles.empty}>Chưa có Agent nào</Text> : null}
-          {agents?.length > 0 ? (
-            <View style={styles.card}>
-              {agents.map((agent, index) => (
-                <View key={agent.id} style={styles.row}>
-                  <AgentIcon size={22} />
-                  <View style={[styles.rowBody, index > 0 && styles.rowDivider]}>
-                    <Text style={styles.rowLabel} numberOfLines={1}>{agent.name}</Text>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.page}>
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {agents === null && !error ? <ActivityIndicator color={colors.text} style={styles.loading} /> : null}
+            {agents?.length === 0 ? <Text style={styles.empty}>Chưa có Agent nào</Text> : null}
+            {agents?.length > 0 ? (
+              <View style={styles.card}>
+                {agents.map((agent, index) => (
+                  <View key={agent.id} style={styles.row}>
+                    <AgentIcon size={22} />
+                    <View style={[styles.rowBody, index > 0 && styles.rowDivider]}>
+                      <Text style={styles.rowLabel} numberOfLines={1}>{agent.name}</Text>
+                    </View>
                   </View>
+                ))}
+              </View>
+            ) : null}
+
+            {formOpen ? (
+              <>
+                <AgentForm onSaved={handleSaved} />
+                <View style={styles.cancel}>
+                  <AuthButton title="Hủy" variant="secondary" onPress={toggleForm} />
                 </View>
-              ))}
-            </View>
-          ) : null}
-        </View>
-      </ScrollView>
+              </>
+            ) : (
+              <AuthButton title="+ Thêm Agent" onPress={toggleForm} />
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -80,6 +116,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  flex: {
+    flex: 1,
+  },
+  cancel: {
+    marginTop: 12,
   },
   content: {
     paddingHorizontal: 16,
@@ -92,22 +134,22 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   loading: {
-    marginTop: 32,
+    marginBottom: 24,
   },
   error: {
     color: colors.error,
     fontSize: 14,
     textAlign: 'center',
-    marginTop: 24,
+    marginBottom: 24,
   },
   empty: {
     color: colors.textSecondary,
     fontSize: 16,
     textAlign: 'center',
-    marginTop: 32,
+    marginBottom: 24,
   },
   card: {
-    marginTop: 24,
+    marginBottom: 24,
     paddingHorizontal: 16,
     borderRadius: 20,
     backgroundColor: colors.surface,

@@ -11,6 +11,7 @@ export const endpoints = {
     'conversations': '/conversations',
     'conversation': (id) => `/conversations/${id}`,
     'messages': (id) => `/conversations/${id}/messages`,
+    'messagesUpload': (id) => `/conversations/${id}/messages/upload`,
     'schedules': '/schedules'
 }
 

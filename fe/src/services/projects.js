@@ -33,6 +33,19 @@ export const sendMessage = async (token, id, content) => {
   return res.data;
 };
 
+export const sendMessageWithFiles = async (token, id, content, files) => {
+  const form = new FormData();
+  files.forEach((file) => {
+    form.append('files', { uri: file.uri, name: file.fileName, type: file.mimeType });
+  });
+  if (content) form.append('content', content);
+  const res = await authApis(token).post(endpoints.messagesUpload(id), form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    transformRequest: (data) => data,
+  });
+  return res.data;
+};
+
 const getSettingsJson = async (token) => {
   const res = await authApis(token).get(endpoints.me);
   return res.data.settings?.settings_json ?? {};
