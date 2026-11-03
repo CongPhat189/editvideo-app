@@ -53,13 +53,85 @@ def resolve_target(agent: Agent) -> GoClawTarget:
     """Gom thông tin của agent trước khi gọi GoClaw, để lúc chờ không cần đụng tới DB."""
     config = get_settings()
     api_key = config.goclaw_api_key
-    if config.goclaw_mode != "mock" and agent.key:
+    raw_key = agent.api_key or getattr(agent, "key", None)
+    if config.goclaw_mode != "mock" and raw_key:
         try:
-            api_key = decrypt_secret(agent.key)
+            api_key = decrypt_secret(raw_key)
         except (SecretDecryptError, SupabaseNotConfigured):
             log.exception("Không giải mã được API key của agent %s", agent.id)
             raise GoClawError("Chưa cấu hình xong kết nối tới agent")
     return GoClawTarget(agent.name, config.goclaw_default_model, agent.domain, api_key)
+
+
+async def test_connection(
+    domain: str,
+    api_key: str | None = None,
+    agent_key: str | None = None,
+    timeout: float = 10.0,
+) -> dict[str, Any]:
+    """Kiểm tra kết nối tới GoClaw qua domain và API key cá nhân."""
+    try:
+        config = get_settings()
+        is_mock = config.goclaw_mode == "mock"
+    except (SupabaseNotConfigured, Exception):
+        is_mock = True
+
+    if is_mock:
+        return {
+            "ok": True,
+            "message": "Kết nối GoClaw thành công (Chế độ Mock)",
+            "details": {
+                "mode": "mock",
+                "domain": domain,
+                "has_api_key": bool(api_key),
+                "has_agent_key": bool(agent_key),
+            },
+        }
+
+    domain_clean = domain.strip().rstrip("/")
+    if not domain_clean.startswith(("http://", "https://")):
+        domain_clean = f"https://{domain_clean}"
+
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    if agent_key:
+        headers["x-agent-key"] = agent_key
+
+    endpoints_to_try = ["/health", "/v1/models", "/api/ping", "/"]
+    last_error: Exception | None = None
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            for endpoint in endpoints_to_try:
+                try:
+                    resp = await client.get(f"{domain_clean}{endpoint}", headers=headers)
+                    if resp.status_code in (200, 204):
+                        return {
+                            "ok": True,
+                            "message": f"Kết nối GoClaw thành công ({endpoint} phản hồi {resp.status_code})",
+                            "details": {"status_code": resp.status_code, "endpoint": endpoint},
+                        }
+                    elif resp.status_code in (401, 403):
+                        return {
+                            "ok": False,
+                            "message": f"Xác thực thất bại: API Key hoặc Agent Key không hợp lệ (mã {resp.status_code})",
+                            "details": {"status_code": resp.status_code},
+                        }
+                except httpx.HTTPError as e:
+                    last_error = e
+
+            return {
+                "ok": False,
+                "message": f"Không kết nối được tới máy chủ GoClaw: {last_error or 'Không có phản hồi'}",
+                "details": {"error": str(last_error) if last_error else None},
+            }
+    except Exception as e:
+        return {
+            "ok": False,
+            "message": f"Lỗi kiểm tra kết nối GoClaw: {e}",
+            "details": {"error": str(e)},
+        }
 
 
 async def send_message(target: GoClawTarget, *, session_key: str, user_id: uuid.UUID, content: str) -> GoClawReply:
