@@ -1,13 +1,22 @@
 import axios from "axios";
 
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://192.168.0.43:8000";
+
 export const endpoints = {
     'login': '/auth/login',
-    'register': '/auth/register'
+    'register': '/auth/register',
+    'me': '/me',
+    'settings': '/me/settings',
+    'agents': '/agents',
+    'conversations': '/conversations',
+    'conversation': (id) => `/conversations/${id}`,
+    'messages': (id) => `/conversations/${id}/messages`,
+    'schedules': '/schedules'
 }
 
 export const authApis = (token) => {
     return axios.create({
-        baseURL: "http://192.168.0.43:8000",
+        baseURL: BASE_URL,
         headers: {
             'Authorization': `Bearer ${token}`
         }
@@ -15,5 +24,5 @@ export const authApis = (token) => {
 }
 
 export default axios.create({
-        baseURL: "http://192.168.0.43:8000",
+    baseURL: BASE_URL
 })

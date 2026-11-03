@@ -12,6 +12,13 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Protected guard={!!user}>
           <Stack.Screen name="index" />
+          <Stack.Screen name="settings" options={{ presentation: 'fullScreenModal' }} />
+          <Stack.Screen name="projects/new" />
+          <Stack.Screen name="projects/[id]/index" />
+          <Stack.Screen name="projects/[id]/schedule" />
+          <Stack.Screen name="scheduled" />
+          <Stack.Screen name="agents/index" />
+          <Stack.Screen name="agents/new" />
         </Stack.Protected>
         <Stack.Protected guard={!user}>
           <Stack.Screen name="login" />
