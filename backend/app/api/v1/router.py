@@ -11,6 +11,7 @@ from app.api.v1.endpoints import (
     platforms,
     publishing,
     schedule,
+    schedules,
     search,
     users,
     videos,
@@ -36,6 +37,7 @@ def build_api_router(enable_demo: bool) -> APIRouter:
     router.include_router(me.router)
     router.include_router(agents.router)
     router.include_router(conversations.router)
+    router.include_router(schedules.router)
     router.include_router(search.router)
     return router
 

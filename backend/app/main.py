@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
@@ -11,6 +12,7 @@ from app.api.v1.router import api_router
 from app.core.config import SupabaseNotConfigured, settings
 from app.core.logging import logger, setup_logging
 from app.db.init_db import init_db
+from app.services import schedule_worker
 
 setup_logging()
 
@@ -23,7 +25,9 @@ async def lifespan(_: FastAPI):
         except Exception:
             # Database demo hỏng thì chỉ các API /api/* bị ảnh hưởng, API mobile vẫn phải chạy
             logger.exception("Không khởi tạo được database demo")
+    worker = asyncio.create_task(schedule_worker.run_forever())
     yield
+    worker.cancel()
 
 
 app = FastAPI(title=settings.APP_TITLE, version=settings.APP_VERSION, lifespan=lifespan)
