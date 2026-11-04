@@ -6,6 +6,9 @@ const MAX_PAGES = 5;
 const TIMEZONE_OFFSET_HOURS = 7;
 const INPUT_FORMAT = /^(\d{1,2})\/(\d{1,2})\/(\d{4}) (\d{1,2}):(\d{2})$/;
 
+// Đúng danh sách backend nhận (app/schemas/schedule.py)
+export const PLATFORMS = ['Facebook', 'YouTube', 'TikTok', 'Instagram', 'Website'];
+
 export const getSchedules = async (token) => {
   const schedules = [];
   for (let page = 0; page < MAX_PAGES; page += 1) {
@@ -18,14 +21,25 @@ export const getSchedules = async (token) => {
   return schedules;
 };
 
-export const createSchedule = async (token, { projectId, name, time, content }) => {
+// Không gửi content: backend lưu lịch và báo ngay cho agent "hẹn lịch đăng lên ... vào ..."
+export const createSchedule = async (token, { projectId, platforms, time }) => {
   const res = await authApis(token).post(endpoints.schedules, {
     conversation_id: projectId,
-    task_name: name,
+    platforms,
     scheduled_at: time,
-    content,
   });
   return res.data;
+};
+
+// Ngày giờ hiện tại theo múi giờ của lịch, không theo múi giờ của máy
+export const getScheduleNow = () => {
+  const now = new Date(Date.now() + TIMEZONE_OFFSET_HOURS * 3600000);
+  return {
+    year: now.getUTCFullYear(),
+    month: now.getUTCMonth(),
+    hour: now.getUTCHours(),
+    dayKey: now.toISOString().slice(0, 10),
+  };
 };
 
 export const validateScheduleTime = (text) => {

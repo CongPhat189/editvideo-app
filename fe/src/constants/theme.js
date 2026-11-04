@@ -9,6 +9,7 @@ export const colors = {
   textMuted: '#85858D',
   divider: '#3A3A3E',
   error: '#F87171',
+  success: '#34D399',
   overlay: 'rgba(0, 0, 0, 0.3)',
   accent: '#2563EB',
   avatar: '#10A37F',

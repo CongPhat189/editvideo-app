@@ -142,7 +142,10 @@ function ScheduledContent({ menuButton }) {
             <View style={styles.detail}>
               <DetailRow label="Tên" value={selected.task_name} />
               <DetailRow label="Thời gian" value={formatScheduleTime(selected)} />
-              <DetailRow label="Nội dung" value={selected.content || 'Không có nội dung'} />
+              {selected.platforms.length > 0 ? (
+                <DetailRow label="Nền tảng" value={selected.platforms.join(', ')} />
+              ) : null}
+              {selected.content ? <DetailRow label="Nội dung" value={selected.content} /> : null}
               <Pressable
                 onPress={() => router.replace(`/projects/${selected.conversation_id}`)}
                 disabled={!projectName}

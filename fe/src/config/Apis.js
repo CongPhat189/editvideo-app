@@ -8,6 +8,7 @@ export const endpoints = {
     'me': '/me',
     'settings': '/me/settings',
     'agents': '/agents',
+    'agentTestConnection': '/agents/test-connection',
     'conversations': '/conversations',
     'conversation': (id) => `/conversations/${id}`,
     'messages': (id) => `/conversations/${id}/messages`,

@@ -18,7 +18,7 @@ const buildCells = (year, month) => {
   return cells;
 };
 
-export default function MonthCalendar({ year, month, selectedKey, markedKeys, onSelectDay, onChangeMonth }) {
+export default function MonthCalendar({ year, month, selectedKey, minKey, markedKeys, onSelectDay, onChangeMonth }) {
   const todayKey = toDayKey(new Date());
   const cells = buildCells(year, month);
 
@@ -55,16 +55,19 @@ export default function MonthCalendar({ year, month, selectedKey, markedKeys, on
           const key = `${year}-${pad(month + 1)}-${pad(day)}`;
           const selected = key === selectedKey;
           const marked = markedKeys.has(key);
+          const disabled = Boolean(minKey) && key < minKey;
           return (
             <Pressable
               key={key}
               onPress={() => onSelectDay(key)}
+              disabled={disabled}
               style={styles.cell}
               accessibilityRole="button"
               accessibilityLabel={`Ngày ${day} tháng ${month + 1}${marked ? ', có lịch' : ''}`}
+              accessibilityState={{ disabled }}
               aria-selected={selected}
             >
-              <View style={[styles.day, key === todayKey && styles.today, selected && styles.daySelected]}>
+              <View style={[styles.day, key === todayKey && styles.today, selected && styles.daySelected, disabled && styles.dayDisabled]}>
                 <Text style={[styles.dayText, selected && styles.dayTextSelected]}>{day}</Text>
                 {marked ? <View style={[styles.dot, selected && styles.dotSelected]} /> : null}
               </View>
@@ -127,6 +130,9 @@ const styles = StyleSheet.create({
   },
   daySelected: {
     backgroundColor: colors.primary,
+  },
+  dayDisabled: {
+    opacity: 0.3,
   },
   dayText: {
     color: colors.text,

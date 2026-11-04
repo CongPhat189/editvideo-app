@@ -6,6 +6,15 @@ export const getAgents = async (token) => {
   return res.data;
 };
 
+export const testAgentConnection = async (token, { domain, apiKey, agentKey }) => {
+  const res = await authApis(token).post(endpoints.agentTestConnection, {
+    domain,
+    api_key: apiKey,
+    agent_key: agentKey,
+  });
+  return res.data;
+};
+
 export const createAgent = async (token, { name, domain, apiKey, agentKey }) => {
   const res = await authApis(token).post(endpoints.agents, {
     name,

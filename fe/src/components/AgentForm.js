@@ -7,7 +7,7 @@ import { LockIcon } from '@/components/AuthIcons';
 import { AgentIcon, PluginIcon } from '@/components/HomeIcons';
 import { MyUserContext } from '@/config/Contexts';
 import { colors } from '@/constants/theme';
-import { createAgent } from '@/services/agents';
+import { createAgent, testAgentConnection } from '@/services/agents';
 import { getErrorMessage } from '@/services/auth';
 
 const MAX_NAME_LENGTH = 150;
@@ -23,30 +23,49 @@ export default function AgentForm({ onSaved }) {
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [connected, setConnected] = useState(null);
   const domainRef = useRef(null);
   const apiKeyRef = useRef(null);
   const agentKeyRef = useRef(null);
 
-  const handleSave = async () => {
+  const busy = saving || testing;
+
+  // Chỉ nút Lưu cần Name, nút Kiểm tra chỉ dùng Domain và 2 key
+  const validate = (needName) => {
     const trimmedDomain = domain.trim();
     const nextErrors = {};
-    if (!name.trim()) nextErrors.name = 'Vui lòng nhập Name';
+    if (needName && !name.trim()) nextErrors.name = 'Vui lòng nhập Name';
     if (!trimmedDomain) nextErrors.domain = 'Vui lòng nhập Domain';
     else if (!DOMAIN_FORMAT.test(trimmedDomain)) nextErrors.domain = 'Domain phải bắt đầu bằng http:// hoặc https://';
     if (!apiKey.trim()) nextErrors.apiKey = 'Vui lòng nhập API Key';
     if (!agentKey.trim()) nextErrors.agentKey = 'Vui lòng nhập Agent Key';
     setErrors(nextErrors);
     setFormError('');
-    if (Object.keys(nextErrors).length > 0) return;
+    setConnected(null);
+    return Object.keys(nextErrors).length === 0;
+  };
 
+  const getKeys = () => ({ domain: domain.trim(), apiKey: apiKey.trim(), agentKey: agentKey.trim() });
+
+  const handleTest = async () => {
+    if (busy || !validate(false)) return;
+    setTesting(true);
+    try {
+      const connection = await testAgentConnection(user.access_token, getKeys());
+      setConnected(connection.ok);
+    } catch (error) {
+      setFormError(getErrorMessage(error));
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (busy || !validate(true)) return;
     setSaving(true);
     try {
-      await createAgent(user.access_token, {
-        name: name.trim(),
-        domain: trimmedDomain,
-        apiKey: apiKey.trim(),
-        agentKey: agentKey.trim(),
-      });
+      await createAgent(user.access_token, { name: name.trim(), ...getKeys() });
       onSaved();
     } catch (error) {
       setFormError(getErrorMessage(error));
@@ -55,6 +74,11 @@ export default function AgentForm({ onSaved }) {
     }
   };
 
+  // Sửa thông tin thì kết quả kiểm tra cũ không còn đúng
+  const editConnection = (setValue) => (value) => {
+    setValue(value);
+    setConnected(null);
+  };
 
   return (
     <View>
@@ -75,7 +99,7 @@ export default function AgentForm({ onSaved }) {
         icon={<PluginIcon size={20} color={colors.textMuted} />}
         error={errors.domain}
         value={domain}
-        onChangeText={setDomain}
+        onChangeText={editConnection(setDomain)}
         placeholder="https://goclaw.example.com"
         maxLength={MAX_DOMAIN_LENGTH}
         keyboardType="url"
@@ -90,7 +114,7 @@ export default function AgentForm({ onSaved }) {
         icon={<LockIcon />}
         error={errors.apiKey}
         value={apiKey}
-        onChangeText={setApiKey}
+        onChangeText={editConnection(setApiKey)}
         placeholder="••••••••"
         secureTextEntry
         autoCapitalize="none"
@@ -105,7 +129,7 @@ export default function AgentForm({ onSaved }) {
         icon={<LockIcon />}
         error={errors.agentKey}
         value={agentKey}
-        onChangeText={setAgentKey}
+        onChangeText={editConnection(setAgentKey)}
         placeholder="••••••••"
         secureTextEntry
         autoCapitalize="none"
@@ -116,12 +140,26 @@ export default function AgentForm({ onSaved }) {
       />
 
       {formError ? <Text style={styles.formError}>{formError}</Text> : null}
-      <AuthButton title="Lưu Agent" onPress={handleSave} loading={saving} />
+      {connected === true ? <Text style={styles.connected}>Agent kết nối thành công</Text> : null}
+      {connected === false ? <Text style={styles.formError}>Agent không kết nối được</Text> : null}
+      <View style={styles.actions}>
+        <AuthButton title="Kiểm tra kết nối" variant="secondary" onPress={handleTest} loading={testing} />
+        <AuthButton title="Lưu Agent" onPress={handleSave} loading={saving} />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  actions: {
+    gap: 12,
+  },
+  connected: {
+    color: colors.success,
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
   formError: {
     color: colors.error,
     fontSize: 14,
