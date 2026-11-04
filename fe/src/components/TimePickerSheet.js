@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AuthButton from '@/components/AuthButton';
 import { CloseIcon } from '@/components/HomeIcons';
 import TimeWheel, { CENTER_ROW, ROW_HEIGHT } from '@/components/TimeWheel';
-import { colors } from '@/constants/theme';
+import { useThemeStyles } from '@/constants/theme';
 import useReducedMotion from '@/hooks/useReducedMotion';
 
 const OPEN_DURATION = 280;
@@ -24,6 +24,8 @@ export default function TimePickerSheet({
   onClose,
   onClosed,
 }) {
+  const styles = useThemeStyles(createStyles);
+
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const reducedMotion = useReducedMotion();
@@ -78,7 +80,7 @@ export default function TimePickerSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   flex: {
     flex: 1,
   },

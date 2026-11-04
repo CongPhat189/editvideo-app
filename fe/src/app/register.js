@@ -7,10 +7,12 @@ import AuthField from '@/components/AuthField';
 import { LockIcon, PhoneIcon, UserIcon } from '@/components/AuthIcons';
 import AuthScreen from '@/components/AuthScreen';
 import { MyUserContext } from '@/config/Contexts';
-import { colors } from '@/constants/theme';
+import { useThemeStyles } from '@/constants/theme';
 import { getErrorMessage, isValidPhone, MIN_PASSWORD_LENGTH, register } from '@/services/auth';
 
 export default function Register() {
+  const styles = useThemeStyles(createStyles);
+
   const [, dispatch] = use(MyUserContext);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -126,7 +128,7 @@ export default function Register() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   formError: {
     color: colors.error,
     fontSize: 14,

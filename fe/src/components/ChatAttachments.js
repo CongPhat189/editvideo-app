@@ -4,10 +4,12 @@ import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CloseIcon, PlayIcon } from '@/components/HomeIcons';
-import { colors } from '@/constants/theme';
+import { useThemeStyles } from '@/constants/theme';
 import { isImage, isVideo } from '@/services/attachments';
 
 const VideoModal = ({ url, onClose }) => {
+  const styles = useThemeStyles(createStyles);
+
   const insets = useSafeAreaInsets();
   const player = useVideoPlayer(url, (videoPlayer) => videoPlayer.play());
 
@@ -28,13 +30,18 @@ const VideoModal = ({ url, onClose }) => {
   );
 };
 
-const VideoTile = ({ style, size = 28 }) => (
-  <View style={[styles.videoTile, style]}>
-    <PlayIcon size={size} />
-  </View>
-);
+const VideoTile = ({ style, size = 28 }) => {
+  const styles = useThemeStyles(createStyles);
+  return (
+    <View style={[styles.videoTile, style]}>
+      <PlayIcon size={size} />
+    </View>
+  );
+};
 
 export const MessageAttachments = ({ attachments, align = 'flex-start' }) => {
+  const styles = useThemeStyles(createStyles);
+
   const [playingUrl, setPlayingUrl] = useState(null);
 
   return (
@@ -74,35 +81,38 @@ export const MessageAttachments = ({ attachments, align = 'flex-start' }) => {
   );
 };
 
-export const PendingAttachments = ({ files, onRemove }) => (
-  <ScrollView
-    horizontal
-    showsHorizontalScrollIndicator={false}
-    contentContainerStyle={styles.pending}
-    keyboardShouldPersistTaps="handled"
-  >
-    {files.map((file) => (
-      <View key={file.uri} style={styles.thumb}>
-        {isVideo(file.mimeType) ? (
-          <VideoTile style={styles.thumbMedia} size={22} />
-        ) : (
-          <Image source={{ uri: file.uri }} style={styles.thumbMedia} accessibilityLabel={file.fileName} />
-        )}
-        <Pressable
-          onPress={() => onRemove(file.uri)}
-          hitSlop={10}
-          style={({ pressed }) => [styles.remove, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel={`Bỏ ${file.fileName}`}
-        >
-          <CloseIcon size={14} />
-        </Pressable>
-      </View>
-    ))}
-  </ScrollView>
-);
+export const PendingAttachments = ({ files, onRemove }) => {
+  const styles = useThemeStyles(createStyles);
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.pending}
+      keyboardShouldPersistTaps="handled"
+    >
+      {files.map((file) => (
+        <View key={file.uri} style={styles.thumb}>
+          {isVideo(file.mimeType) ? (
+            <VideoTile style={styles.thumbMedia} size={22} />
+          ) : (
+            <Image source={{ uri: file.uri }} style={styles.thumbMedia} accessibilityLabel={file.fileName} />
+          )}
+          <Pressable
+            onPress={() => onRemove(file.uri)}
+            hitSlop={10}
+            style={({ pressed }) => [styles.remove, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={`Bỏ ${file.fileName}`}
+          >
+            <CloseIcon size={14} />
+          </Pressable>
+        </View>
+      ))}
+    </ScrollView>
+  );
+};
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   pressed: {
     opacity: 0.7,
   },

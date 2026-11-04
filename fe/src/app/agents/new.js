@@ -5,13 +5,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import AgentForm from '@/components/AgentForm';
 import PageHeader from '@/components/PageHeader';
-import { colors } from '@/constants/theme';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
 
 // Trang riêng để thêm Agent ngay từ form tạo dự án; trang Agent thì hiện form ngay trong danh sách
 export default function NewAgent() {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
       <PageHeader title="Thêm Agent" />
       <KeyboardAvoidingView
         style={styles.flex}
@@ -31,7 +34,7 @@ export default function NewAgent() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundDeep,

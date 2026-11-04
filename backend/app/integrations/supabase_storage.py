@@ -1,6 +1,7 @@
 """Lưu file đính kèm trên Supabase Storage. Bucket riêng tư: app xem file qua URL có chữ ký, hết hạn sau một giờ."""
 
 import logging
+from urllib.parse import quote
 
 import httpx
 
@@ -57,6 +58,20 @@ async def upload(path: str, data: bytes, mime_type: str) -> None:
         if _is_rejected(resp):
             raise StorageError("Loại file không được hỗ trợ hoặc file quá lớn", rejected=True)
         raise StorageError("Không lưu được file, vui lòng thử lại")
+
+
+async def download(path: str) -> bytes:
+    """Đọc file riêng tư bằng service key để worker lịch đăng có thể gửi ảnh cho GoClaw."""
+    base, headers, bucket = _endpoint()
+    safe_path = quote(path, safe="/")
+    try:
+        async with httpx.AsyncClient(timeout=UPLOAD_TIMEOUT_SECONDS) as client:
+            resp = await client.get(f"{base}/object/{bucket}/{safe_path}", headers=headers)
+            resp.raise_for_status()
+            return resp.content
+    except httpx.HTTPError as e:
+        log.warning("Không tải được file lịch đăng từ Storage: %s", e)
+        raise StorageError("Không tải được ảnh đính kèm của lịch đăng")
 
 
 async def sign(paths: list[str]) -> dict[str, str]:

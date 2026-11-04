@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { BackIcon } from '@/components/HomeIcons';
-import { colors } from '@/constants/theme';
+import { useThemeStyles } from '@/constants/theme';
 import useTopBarSpace from '@/hooks/useTopBarSpace';
 
 const goBack = () => {
@@ -11,6 +11,8 @@ const goBack = () => {
 };
 
 export default function PageHeader({ title, left }) {
+  const styles = useThemeStyles(createStyles);
+
   const topBarSpace = useTopBarSpace();
 
   return (
@@ -32,7 +34,7 @@ export default function PageHeader({ title, left }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',

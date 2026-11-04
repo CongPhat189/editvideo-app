@@ -1,7 +1,7 @@
 import { memo, useCallback, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 
-import { colors } from '@/constants/theme';
+import { useThemeStyles } from '@/constants/theme';
 
 export const ROW_HEIGHT = 44;
 export const CENTER_ROW = 3;
@@ -23,6 +23,8 @@ const keyExtractor = (row) => String(row);
 const getItemLayout = (_, index) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index });
 
 const WheelRow = memo(function WheelRow({ row, count, scrollY }) {
+  const styles = useThemeStyles(createStyles);
+
   const center = (row - CENTER_ROW) * ROW_HEIGHT;
   const inputRange = DISTANCES.map((distance) => center + distance * ROW_HEIGHT);
   const animate = (outputRange) => scrollY.interpolate({ inputRange, outputRange, extrapolate: 'clamp' });
@@ -71,6 +73,8 @@ const createWheel = ({ count, initialValue, onChange, setValue }) => {
 };
 
 export default function TimeWheel({ count, initialValue, label, onChange }) {
+  const styles = useThemeStyles(createStyles);
+
   const listRef = useRef(null);
   const [value, setValue] = useState(initialValue);
   const [wheel] = useState(() => createWheel({ count, initialValue, onChange, setValue }));
@@ -118,7 +122,7 @@ export default function TimeWheel({ count, initialValue, label, onChange }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   wheel: {
     width: 96,
     height: WHEEL_HEIGHT,

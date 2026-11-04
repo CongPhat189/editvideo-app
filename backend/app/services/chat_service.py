@@ -16,6 +16,13 @@ from app.models import Conversation, Message, MessageAttachment
 
 HIDDEN_KEY = "hidden"  # Khóa trong messages.metadata của tin không hiện trong khung chat
 
+CONTENT_ONLY_INSTRUCTION = (
+    "\n\n[CHẾ ĐỘ TẠO CONTENT]\n"
+    "Chỉ trả về bản content hoàn chỉnh để đăng. Không viết lời dẫn, giải thích, nhận xét, tiêu đề kiểu 'bản nháp', "
+    "câu hỏi, lựa chọn tiếp theo hoặc lời mời trao đổi. Không hỏi lại; tự hoàn thiện nội dung hợp lý từ thông tin đã có. "
+    "Giữ nguyên ngôn ngữ, emoji và hashtag phù hợp. Response chỉ gồm đúng phần content có thể đăng, không bọc markdown."
+)
+
 
 class ReplyInFlight(Exception):
     """Agent đang trả lời tin trước trong cùng cuộc trò chuyện."""
@@ -76,6 +83,7 @@ async def send_to_agent(
     user_id: uuid.UUID,
     content: str | None,
     idempotency_key: uuid.UUID,
+    response_mode: str = "chat",
     hidden: bool = False,
     content_type: str = "text",
     attachments: list[dict] | None = None,
@@ -133,7 +141,12 @@ async def send_to_agent(
     error = None
     try:
         extra = {"media": media} if media else {}
-        result = await goclaw.send_message(target, session_key=session_key, user_id=user_id, content=content or "", **extra)
+        agent_content = (content or "")
+        if response_mode == "content_only":
+            agent_content += CONTENT_ONLY_INSTRUCTION
+        result = await goclaw.send_message(
+            target, session_key=session_key, user_id=user_id, content=agent_content, **extra
+        )
         await session.execute(
             update(Message)
             .where(finished)

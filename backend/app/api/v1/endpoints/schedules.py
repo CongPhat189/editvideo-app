@@ -9,7 +9,7 @@ from sqlalchemy import func, not_, select, update
 from app.api.supabase_deps import CurrentUser, Session
 from app.core.rate_limit import limiter
 from app.integrations import goclaw
-from app.models import Agent, Conversation, ScheduledTask
+from app.models import Agent, Conversation, Message, ScheduledTask
 from app.schemas.schedule import ScheduleCreate, ScheduleOut
 from app.services.schedule_worker import NOTICE_KIND
 
@@ -19,6 +19,31 @@ NOT_FOUND = HTTPException(status.HTTP_404_NOT_FOUND, "Không tìm thấy lịch 
 ACTIVE = ("scheduled", "retrying")
 MAX_ACTIVE_PER_USER = 100  # Chặn đặt lịch gọi AI vô hạn (tốn tiền)
 _IS_SCHEDULE = not_(ScheduledTask.payload.has_key("kind"))
+
+
+def _publish_instruction(content: str, platforms: list[str], when: str, timezone: str) -> str:
+    channels = ", ".join(platforms) if platforms else "các nền tảng đã chọn trong lịch"
+    return (
+        "LỆNH ĐĂNG ĐÃ ĐƯỢC NGƯỜI DÙNG XÁC NHẬN TỪ TRƯỚC. Bây giờ đã đến giờ đăng. Hãy gọi công cụ/tích hợp đăng bài "
+        f"thật để đăng ngay nội dung bên dưới lên {channels}: {when} ({timezone}). Không hỏi lại, không xin xác nhận, "
+        "không chỉ tạo bản nháp, không viết lại hoặc thêm lời dẫn. Hãy đăng nguyên văn nội dung. "
+        "Chỉ báo thành công sau khi nền tảng xác nhận đã đăng; nếu không thể đăng, trả lỗi cụ thể, không giả vờ đã đăng. "
+        "Sau khi thực hiện, chỉ trả một câu ngắn báo kết quả, không hỏi thêm.\n\n"
+        "--- BẮT ĐẦU NỘI DUNG CẦN ĐĂNG ---\n"
+        f"{content}\n"
+        "--- KẾT THÚC NỘI DUNG CẦN ĐĂNG ---"
+    )
+
+
+def _schedule_confirmation(platforms: list[str], when: str, timezone: str) -> str:
+    channels = ", ".join(platforms) if platforms else "chưa chọn nền tảng"
+    return (
+        "HỆ THỐNG ĐÃ LƯU LỊCH ĐĂNG THEO XÁC NHẬN CỦA NGƯỜI DÙNG. "
+        f"Thời gian: {when} ({timezone}). Nền tảng: {channels}. "
+        "Nội dung và ảnh đính kèm (nếu có) đã được lưu. Đến giờ, hệ thống sẽ gửi lại lệnh đăng. "
+        "Bây giờ chỉ trả lời đúng một câu xác nhận ngắn, nêu rõ ngày giờ và nền tảng. "
+        "Không hỏi người dùng bất kỳ câu nào, không yêu cầu xác nhận thêm, không đăng bài ngay lúc này."
+    )
 
 
 async def _get_owned(session: Session, user_id: uuid.UUID, schedule_id: uuid.UUID) -> ScheduledTask:
@@ -32,12 +57,7 @@ async def _get_owned(session: Session, user_id: uuid.UUID, schedule_id: uuid.UUI
 
 @router.post("", response_model=ScheduleOut, status_code=status.HTTP_201_CREATED)
 async def create_schedule(body: ScheduleCreate, user: CurrentUser, session: Session):
-    """Đặt lịch trong cuộc trò chuyện đang mở.
-
-    Không có content: lưu lịch, worker gửi ngay trong nền tin "hẹn lịch đăng vào ..." cho agent.
-    Tin này không hiện trong khung chat, câu trả lời của agent thì có.
-    Có content: đến giờ worker mới gửi content cho agent.
-    """
+    """Lưu lịch, gửi một yêu cầu xác nhận giờ cho agent và giao lệnh đăng khi tới hạn."""
     limiter.hit(f"schedule-create:{user.id}", 30, 60)
     conv = await session.scalar(
         select(Conversation).where(
@@ -50,6 +70,51 @@ async def create_schedule(body: ScheduleCreate, user: CurrentUser, session: Sess
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Không tìm thấy cuộc trò chuyện")
     if conv.status != "active":
         raise HTTPException(status.HTTP_409_CONFLICT, "Cuộc trò chuyện đã lưu trữ, bỏ lưu trữ để đặt lịch")
+    if (body.content_message_id is not None or body.content is not None) and not body.platforms:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Chọn ít nhất một nền tảng để đăng nội dung đã lên lịch",
+        )
+    if body.content_message_id is not None:
+        content_message = await session.scalar(
+            select(Message).where(
+                Message.id == body.content_message_id,
+                Message.conversation_id == conv.id,
+                Message.user_id == user.id,
+                Message.role == "assistant",
+                Message.status == "completed",
+                Message.content.is_not(None),
+                func.length(func.btrim(Message.content)) > 0,
+            )
+        )
+        if content_message is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "content_message_id phải là phản hồi assistant đã hoàn tất trong cuộc trò chuyện này",
+            )
+        scheduled_content = content_message.content
+        source_message = None
+        if content_message.reply_to_message_id is not None:
+            source_message = await session.scalar(
+                select(Message).where(
+                    Message.id == content_message.reply_to_message_id,
+                    Message.conversation_id == conv.id,
+                    Message.user_id == user.id,
+                    Message.role == "user",
+                )
+            )
+        image_attachments = [
+            {
+                "file_path": item.file_path,
+                "file_name": item.file_name,
+                "mime_type": item.mime_type,
+            }
+            for item in (source_message.attachments if source_message is not None else [])
+            if item.mime_type.startswith("image/")
+        ]
+    else:
+        scheduled_content = body.content
+        image_attachments = []
     # Báo lỗi cấu hình ngay lúc đặt, không đợi tới giờ gửi
     try:
         goclaw.resolve_target(await session.get(Agent, conv.agent_id))
@@ -62,6 +127,7 @@ async def create_schedule(body: ScheduleCreate, user: CurrentUser, session: Sess
             ScheduledTask.user_id == user.id,
             ScheduledTask.status.in_(ACTIVE),
             ScheduledTask.payload.has_key("content"),
+            _IS_SCHEDULE,
         )
     )
     if active >= MAX_ACTIVE_PER_USER:
@@ -72,33 +138,39 @@ async def create_schedule(body: ScheduleCreate, user: CurrentUser, session: Sess
     task = ScheduledTask(
         user_id=user.id,
         conversation_id=conv.id,
+        content_message_id=body.content_message_id,
         agent_id=conv.agent_id,
-        task_name=body.task_name or (body.content.strip()[:60] if body.content else f"Lịch {when}"),
+        task_name=body.task_name or (scheduled_content.strip()[:60] if scheduled_content else f"Lịch {when}"),
         task_type="send_message",
-        payload={"content": body.content} if body.content else {},
+        payload=(
+            {
+                "content": scheduled_content,
+                "agent_instruction": _publish_instruction(scheduled_content, body.platforms, when, body.timezone),
+                "media": image_attachments,
+            }
+            if scheduled_content
+            else {}
+        ),
         platforms=body.platforms,
         scheduled_at=body.scheduled_at,
         timezone=body.timezone,
     )
     session.add(task)
-    if body.content is None:
-        # Dùng chung cơ chế gửi của worker để có thử lại khi agent bận. Lưu cùng transaction với lịch.
-        # Tốn lượt gọi AI như một tin chat thường.
-        limiter.hit(f"send:minute:{user.id}", 20, 60)
-        limiter.hit(f"send:hour:{user.id}", 300, 3600)
-        where_to = f"lên {', '.join(body.platforms)} " if body.platforms else ""
-        session.add(
-            ScheduledTask(
-                user_id=user.id,
-                conversation_id=conv.id,
-                agent_id=conv.agent_id,
-                task_name=f"Báo hẹn lịch {when}",
-                task_type="send_message",
-                payload={"content": f"hẹn lịch đăng {where_to}vào {when}", "kind": NOTICE_KIND},
-                scheduled_at=func.now(),
-                timezone=body.timezone,
-            )
+    session.add(
+        ScheduledTask(
+            user_id=user.id,
+            conversation_id=conv.id,
+            agent_id=conv.agent_id,
+            task_name=f"Xác nhận lịch đăng {when}",
+            task_type="send_message",
+            payload={
+                "content": _schedule_confirmation(body.platforms, when, body.timezone),
+                "kind": NOTICE_KIND,
+            },
+            scheduled_at=func.now(),
+            timezone=body.timezone,
         )
+    )
     await session.commit()
     await session.refresh(task)
     return ScheduleOut.from_task(task)
