@@ -23,7 +23,16 @@
     },
     "plugins": [
       "expo-router",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-video",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Cho phép app chọn ảnh và video để gửi cho Agent.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
     ]
   }
 }

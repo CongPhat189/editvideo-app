@@ -2,13 +2,13 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 import { colors } from '@/constants/theme';
 
-const Icon = ({ children }) => (
+export const Icon = ({ children, color = colors.textMuted, size = 20 }) => (
   <Svg
-    width={20}
-    height={20}
+    width={size}
+    height={size}
     viewBox="0 0 24 24"
     fill="none"
-    stroke={colors.textMuted}
+    stroke={color}
     strokeWidth={1.75}
     strokeLinecap="round"
     strokeLinejoin="round"
@@ -17,8 +17,8 @@ const Icon = ({ children }) => (
   </Svg>
 );
 
-export const PhoneIcon = () => (
-  <Icon>
+export const PhoneIcon = (props) => (
+  <Icon {...props}>
     <Path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384" />
   </Icon>
 );
