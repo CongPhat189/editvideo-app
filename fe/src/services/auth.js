@@ -23,6 +23,7 @@ export const getErrorMessage = (error) => {
   if (!error.response) return 'Không kết nối được máy chủ. Vui lòng thử lại.';
   const { detail } = error.response.data ?? {};
   if (typeof detail === 'string') return detail;
+  if (typeof detail?.message === 'string') return detail.message;
   if (error.response.status === 422) return 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.';
   return 'Có lỗi xảy ra. Vui lòng thử lại sau.';
 };
