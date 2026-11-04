@@ -113,9 +113,17 @@ async def test_connection(
     """Kiểm tra kết nối tới GoClaw qua domain và API key cá nhân."""
     try:
         config = get_settings()
-        is_mock = config.goclaw_mode == "mock"
+        is_mock_mode = config.goclaw_mode == "mock"
     except (SupabaseNotConfigured, Exception):
-        is_mock = True
+        is_mock_mode = False
+
+    is_mock = is_mock_mode and (
+        "mock" in domain.lower()
+        or domain.endswith(".goclaw.ai")
+        or domain.endswith(".local")
+        or domain.endswith(".test")
+        or domain in ("https://api.goclaw.ai", "https://goclaw.ai")
+    )
 
     if is_mock:
         return {
@@ -148,7 +156,7 @@ async def test_connection(
                     if resp.status_code in (200, 204):
                         return {
                             "ok": True,
-                            "message": f"Kết nối GoClaw thành công ({endpoint} phản hồi {resp.status_code})",
+                            "message": "Kết nối GoClaw thành công",
                             "details": {"status_code": resp.status_code, "endpoint": endpoint},
                         }
                     elif resp.status_code in (401, 403):
