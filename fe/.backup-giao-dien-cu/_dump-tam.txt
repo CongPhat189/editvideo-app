@@ -1,0 +1,5227 @@
+===== src/app/_layout.js
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+
+import { MyUserContext } from '@/config/Contexts';
+import { palettes, ThemeContext } from '@/constants/theme';
+import { MyUserReducer } from '@/reducers/reducers';
+import { getThemePreference, saveThemePreference } from '@/services/appearance';
+
+// Trang mở từ Sidebar không trượt thêm: nội dung tự trượt vào bằng hiệu ứng khép Sidebar
+const drawerScreenOptions = ({ route }) => ({
+  animation: route.params?.fromDrawer ? 'none' : 'fade',
+  gestureEnabled: true,
+});
+
+export default function RootLayout() {
+  const [user, dispatch] = useReducer(MyUserReducer, null);
+  const [theme, setTheme] = useState('dark');
+  const themeVersion = useRef(0);
+  const token = user?.access_token;
+  const colors = palettes[theme];
+
+  useEffect(() => {
+    if (!token) {
+      setTheme('dark');
+      return undefined;
+    }
+    let active = true;
+    const requestedVersion = themeVersion.current;
+    getThemePreference(token)
+      .then((savedTheme) => {
+        if (active && requestedVersion === themeVersion.current) setTheme(savedTheme);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [token]);
+
+  const updateTheme = useCallback((nextTheme) => {
+    themeVersion.current += 1;
+    setTheme(nextTheme);
+    if (token) saveThemePreference(token, nextTheme).catch(() => {});
+  }, [token]);
+
+  return (
+    <MyUserContext.Provider value={[user, dispatch]}>
+      <ThemeContext.Provider value={{ theme, colors, setTheme: updateTheme }}>
+        <ThemeProvider value={theme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              animation: 'slide_from_right',
+              gestureEnabled: true,
+              contentStyle: { backgroundColor: colors.backgroundDeep },
+            }}
+          >
+            <Stack.Protected guard={!!user}>
+              <Stack.Screen name="index" options={{ gestureEnabled: false }} />
+              <Stack.Screen name="settings" options={{ presentation: 'fullScreenModal' }} />
+              <Stack.Screen name="profile" options={{ presentation: 'fullScreenModal' }} />
+              <Stack.Screen name="projects/new" options={drawerScreenOptions} />
+              <Stack.Screen name="projects/[id]/index" options={drawerScreenOptions} />
+              <Stack.Screen name="projects/[id]/schedule" />
+              <Stack.Screen name="scheduled" options={drawerScreenOptions} />
+              <Stack.Screen name="agents/index" options={drawerScreenOptions} />
+              <Stack.Screen name="agents/new" />
+            </Stack.Protected>
+            <Stack.Protected guard={!user}>
+              <Stack.Screen name="login" />
+              <Stack.Screen name="register" />
+            </Stack.Protected>
+          </Stack>
+        </ThemeProvider>
+      </ThemeContext.Provider>
+    </MyUserContext.Provider>
+  );
+}
+===== src/app/index.js
+import { router } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { use } from 'react';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import DrawerScreen from '@/components/DrawerScreen';
+import { AgentIcon, ChevronRightIcon, FolderIcon, PlanIcon, PlayIcon } from '@/components/HomeIcons';
+import { MyUserContext } from '@/config/Contexts';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
+import useTopBarSpace from '@/hooks/useTopBarSpace';
+
+const WIDE_SCREEN = 768;
+
+export default function Home() {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
+  const [user] = use(MyUserContext);
+  const { width } = useWindowDimensions();
+  const topBarSpace = useTopBarSpace();
+
+  return (
+    <DrawerScreen root>
+      {(menuButton) => (
+        <>
+          <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
+          <SafeAreaView style={styles.page}>
+            <View style={[styles.topBar, { paddingTop: topBarSpace }]}>
+              {menuButton}
+            </View>
+
+            <View style={[styles.content, { paddingHorizontal: width >= WIDE_SCREEN ? 32 : 20 }]}>
+              <View style={styles.welcome}>
+                <Text style={styles.eyebrow}>AI EDIT</Text>
+                <Text style={styles.greeting}>Xin chào{user?.full_name ? `, ${user.full_name}` : ''}</Text>
+                <Text style={styles.subtitle}>Bạn muốn tạo video gì hôm nay?</Text>
+              </View>
+
+              <Pressable
+                onPress={() => router.push('/projects/new')}
+                style={({ pressed }) => [styles.startCard, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Bắt đầu dự án mới"
+              >
+                <View style={styles.cardIcon}><FolderIcon size={22} /></View>
+                <View style={styles.cardCopy}>
+                  <Text style={styles.cardTitle}>Bắt đầu trò chuyện mới</Text>
+                  <Text style={styles.cardSubtitle}>Chọn Agent và mô tả ý tưởng video của bạn</Text>
+                </View>
+                <ChevronRightIcon size={20} color={colors.textSecondary} />
+              </Pressable>
+
+              <View style={styles.suggestions}>
+                <Text style={styles.sectionTitle}>Bạn có thể bắt đầu bằng cách</Text>
+                <Suggestion Icon={PlayIcon} label="Lên ý tưởng cho video mới" />
+                <Suggestion Icon={AgentIcon} label="Viết kịch bản video ngắn" />
+                <Suggestion Icon={PlanIcon} label="Lập lịch nội dung tuần này" />
+              </View>
+            </View>
+          </SafeAreaView>
+        </>
+      )}
+    </DrawerScreen>
+  );
+}
+
+function Suggestion({ Icon, label }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
+  return (
+    <View style={styles.suggestion}>
+      <Icon size={18} color={colors.textSecondary} />
+      <Text style={styles.suggestionText}>{label}</Text>
+    </View>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  page: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  topBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingBottom: 4,
+  },
+  content: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 28,
+  },
+  welcome: {
+    width: '100%',
+    maxWidth: 560,
+    marginBottom: 28,
+  },
+  eyebrow: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.8,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  greeting: {
+    maxWidth: 560,
+    color: colors.text,
+    fontSize: 30,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  subtitle: {
+    maxWidth: 560,
+    color: colors.textSecondary,
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  startCard: {
+    width: '100%',
+    maxWidth: 560,
+    minHeight: 84,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 16,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.divider,
+    backgroundColor: colors.surface,
+  },
+  cardIcon: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+    backgroundColor: colors.background,
+  },
+  cardCopy: { flex: 1, gap: 4 },
+  cardTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  cardSubtitle: { color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  pressed: { opacity: 0.72 },
+  suggestions: {
+    width: '100%',
+    maxWidth: 560,
+    marginTop: 28,
+    gap: 16,
+  },
+  sectionTitle: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  suggestion: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  suggestionText: { color: colors.textSecondary, fontSize: 14 },
+});
+===== src/app/login.js
+import { router } from 'expo-router';
+import { use, useRef, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+
+import AuthButton from '@/components/AuthButton';
+import AuthField from '@/components/AuthField';
+import { LockIcon, PhoneIcon } from '@/components/AuthIcons';
+import AuthScreen from '@/components/AuthScreen';
+import { MyUserContext } from '@/config/Contexts';
+import { useThemeStyles } from '@/constants/theme';
+import { getErrorMessage, isValidPhone, login } from '@/services/auth';
+
+export default function Login() {
+  const styles = useThemeStyles(createStyles);
+
+  const [, dispatch] = use(MyUserContext);
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState({});
+  const [formError, setFormError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const passwordRef = useRef(null);
+
+  const handleLogin = async () => {
+    const nextErrors = {};
+    if (!isValidPhone(phone)) nextErrors.phone = 'Số điện thoại không hợp lệ';
+    if (!password) nextErrors.password = 'Vui lòng nhập mật khẩu';
+    setErrors(nextErrors);
+    setFormError('');
+    if (Object.keys(nextErrors).length > 0) return;
+
+    setLoading(true);
+    try {
+      dispatch({ type: 'LOGIN', payload: await login(phone, password) });
+    } catch (error) {
+      setFormError(getErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Backend chưa có API đặt lại mật khẩu cho tài khoản số điện thoại
+  const handleForgotPassword = () => {
+    Alert.alert('Quên mật khẩu', 'Liên hệ nhu.digitalmkt để được cấp lại mật khẩu.');
+  };
+
+  return (
+    <AuthScreen
+      title="nhu video AI"
+      subtitle="Quay bằng điện thoại – AI dựng & đăng giúp bạn"
+      footer={
+        <Pressable accessibilityRole="link" onPress={() => router.push('/register')} hitSlop={8}>
+          <Text style={styles.footerText}>
+            Chưa có tài khoản? <Text style={styles.footerLink}>Đăng ký</Text>
+          </Text>
+        </Pressable>
+      }
+    >
+      <AuthField
+        label="Số điện thoại"
+        icon={<PhoneIcon />}
+        error={errors.phone}
+        value={phone}
+        onChangeText={setPhone}
+        placeholder="0912 345 678"
+        keyboardType="phone-pad"
+        autoComplete="tel"
+        textContentType="telephoneNumber"
+        returnKeyType="next"
+        onSubmitEditing={() => passwordRef.current?.focus()}
+      />
+      <AuthField
+        ref={passwordRef}
+        label="Mật khẩu"
+        icon={<LockIcon />}
+        error={errors.password}
+        value={password}
+        onChangeText={setPassword}
+        placeholder="••••••••"
+        secureTextEntry
+        autoCapitalize="none"
+        autoComplete="current-password"
+        textContentType="password"
+        returnKeyType="done"
+        onSubmitEditing={handleLogin}
+      />
+
+      {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+      <AuthButton title="Đăng nhập" onPress={handleLogin} loading={loading} />
+
+      <Pressable
+        accessibilityRole="button"
+        onPress={handleForgotPassword}
+        style={styles.forgot}
+        hitSlop={8}
+      >
+        <Text style={styles.forgotText}>Quên mật khẩu?</Text>
+      </Pressable>
+
+      <View style={styles.dividerRow}>
+        <View style={styles.dividerLine} />
+        <Text style={styles.dividerText}>hoặc</Text>
+        <View style={styles.dividerLine} />
+      </View>
+
+      <AuthButton
+        title="Tiếp tục với số điện thoại"
+        variant="secondary"
+        onPress={() => router.push('/register')}
+      />
+    </AuthScreen>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  formError: {
+    color: colors.error,
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  forgot: {
+    alignSelf: 'center',
+    marginTop: 16,
+  },
+  forgotText: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.divider,
+  },
+  dividerText: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  footerText: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  footerLink: {
+    color: colors.text,
+    fontWeight: '600',
+  },
+});
+===== src/app/profile.js
+import { router } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { use } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { BackIcon, ProfileIcon } from '@/components/HomeIcons';
+import { MyUserContext } from '@/config/Contexts';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
+
+const getInitials = (name = '') => name.trim().split(/\s+/).filter(Boolean).map((part) => part[0]).slice(-2).join('').toUpperCase() || 'U';
+
+export default function Profile() {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+  const [user] = use(MyUserContext);
+  const insets = useSafeAreaInsets();
+
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  };
+
+  const details = [
+    { label: 'Họ và tên', value: user?.full_name },
+    { label: 'Số điện thoại', value: user?.phone },
+    ...(user?.email ? [{ label: 'Email', value: user.email }] : []),
+  ].filter((item) => item.value);
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
+      <View style={styles.header}>
+        <Pressable
+          onPress={goBack}
+          style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Quay lại"
+        >
+          <BackIcon size={22} />
+        </Pressable>
+        <Text style={styles.title}>Hồ sơ</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
+      <View style={styles.content}>
+        <View style={styles.identity}>
+          <View style={styles.avatar}><Text style={styles.avatarText}>{getInitials(user?.full_name || '')}</Text></View>
+          <Text style={styles.name}>{user?.full_name || 'Người dùng'}</Text>
+          <Text style={styles.plan}>Free</Text>
+        </View>
+        <View style={styles.card}>
+          {details.map(({ label, value }, index) => (
+            <View key={label} style={[styles.detailRow, index > 0 && styles.divided]}>
+              <Text style={styles.label}>{label}</Text>
+              <Text style={styles.value}>{value}</Text>
+            </View>
+          ))}
+          {details.length === 0 ? <Text style={styles.empty}>Chưa có thông tin hồ sơ.</Text> : null}
+        </View>
+        <View style={styles.note}>
+          <ProfileIcon size={18} color={colors.textSecondary} />
+          <Text style={styles.noteText}>Thông tin hồ sơ của tài khoản đang đăng nhập.</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.backgroundDeep },
+  header: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.divider,
+  },
+  backButton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 20 },
+  title: { color: colors.text, fontSize: 17, fontWeight: '600' },
+  headerSpacer: { width: 40 },
+  content: { width: '100%', maxWidth: 560, alignSelf: 'center', padding: 20 },
+  identity: { alignItems: 'center', paddingVertical: 24 },
+  avatar: {
+    width: 76,
+    height: 76,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 38,
+    backgroundColor: colors.avatar,
+  },
+  avatarText: { color: '#FFFFFF', fontSize: 24, fontWeight: '600' },
+  name: { color: colors.text, fontSize: 20, fontWeight: '600', marginTop: 12 },
+  plan: { color: colors.textSecondary, fontSize: 13, marginTop: 4 },
+  card: { paddingHorizontal: 16, borderRadius: 16, backgroundColor: colors.background },
+  detailRow: { minHeight: 58, justifyContent: 'center', gap: 4 },
+  divided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.divider },
+  label: { color: colors.textSecondary, fontSize: 12 },
+  value: { color: colors.text, fontSize: 15 },
+  empty: { color: colors.textSecondary, fontSize: 14, paddingVertical: 18 },
+  note: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16, paddingHorizontal: 4 },
+  noteText: { flex: 1, color: colors.textSecondary, fontSize: 13 },
+  pressed: { opacity: 0.7 },
+});
+===== src/app/register.js
+import { router } from 'expo-router';
+import { use, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text } from 'react-native';
+
+import AuthButton from '@/components/AuthButton';
+import AuthField from '@/components/AuthField';
+import { LockIcon, PhoneIcon, UserIcon } from '@/components/AuthIcons';
+import AuthScreen from '@/components/AuthScreen';
+import { MyUserContext } from '@/config/Contexts';
+import { useThemeStyles } from '@/constants/theme';
+import { getErrorMessage, isValidPhone, MIN_PASSWORD_LENGTH, register } from '@/services/auth';
+
+export default function Register() {
+  const styles = useThemeStyles(createStyles);
+
+  const [, dispatch] = use(MyUserContext);
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [errors, setErrors] = useState({});
+  const [formError, setFormError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const phoneRef = useRef(null);
+  const passwordRef = useRef(null);
+  const confirmPasswordRef = useRef(null);
+
+  const handleRegister = async () => {
+    const nextErrors = {};
+    if (!fullName.trim()) nextErrors.fullName = 'Vui lòng nhập họ và tên';
+    if (!isValidPhone(phone)) nextErrors.phone = 'Số điện thoại không hợp lệ';
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      nextErrors.password = `Mật khẩu cần ít nhất ${MIN_PASSWORD_LENGTH} ký tự`;
+    }
+    if (confirmPassword !== password) nextErrors.confirmPassword = 'Mật khẩu nhập lại không khớp';
+    setErrors(nextErrors);
+    setFormError('');
+    if (Object.keys(nextErrors).length > 0) return;
+
+    setLoading(true);
+    try {
+      dispatch({ type: 'LOGIN', payload: await register(fullName, phone, password) });
+    } catch (error) {
+      setFormError(getErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const goToLogin = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/login');
+  };
+
+  return (
+    <AuthScreen
+      title="Tạo tài khoản"
+      subtitle="Đăng ký bằng số điện thoại để bắt đầu"
+      footer={
+        <Pressable accessibilityRole="link" onPress={goToLogin} hitSlop={8}>
+          <Text style={styles.footerText}>
+            Đã có tài khoản? <Text style={styles.footerLink}>Đăng nhập</Text>
+          </Text>
+        </Pressable>
+      }
+    >
+      <AuthField
+        label="Họ và tên"
+        icon={<UserIcon />}
+        error={errors.fullName}
+        value={fullName}
+        onChangeText={setFullName}
+        placeholder="Nguyễn Văn A"
+        autoCapitalize="words"
+        autoComplete="name"
+        textContentType="name"
+        returnKeyType="next"
+        onSubmitEditing={() => phoneRef.current?.focus()}
+      />
+      <AuthField
+        ref={phoneRef}
+        label="Số điện thoại"
+        icon={<PhoneIcon />}
+        error={errors.phone}
+        value={phone}
+        onChangeText={setPhone}
+        placeholder="0912 345 678"
+        keyboardType="phone-pad"
+        autoComplete="tel"
+        textContentType="telephoneNumber"
+        returnKeyType="next"
+        onSubmitEditing={() => passwordRef.current?.focus()}
+      />
+      <AuthField
+        ref={passwordRef}
+        label="Mật khẩu"
+        icon={<LockIcon />}
+        error={errors.password}
+        value={password}
+        onChangeText={setPassword}
+        placeholder="Ít nhất 8 ký tự"
+        secureTextEntry
+        autoCapitalize="none"
+        autoComplete="new-password"
+        textContentType="newPassword"
+        returnKeyType="next"
+        onSubmitEditing={() => confirmPasswordRef.current?.focus()}
+      />
+      <AuthField
+        ref={confirmPasswordRef}
+        label="Nhập lại mật khẩu"
+        icon={<LockIcon />}
+        error={errors.confirmPassword}
+        value={confirmPassword}
+        onChangeText={setConfirmPassword}
+        placeholder="••••••••"
+        secureTextEntry
+        autoCapitalize="none"
+        autoComplete="new-password"
+        textContentType="newPassword"
+        returnKeyType="done"
+        onSubmitEditing={handleRegister}
+      />
+
+      {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+      <AuthButton title="Đăng ký" onPress={handleRegister} loading={loading} />
+    </AuthScreen>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  formError: {
+    color: colors.error,
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  footerText: {
+    color: colors.textMuted,
+    fontSize: 13,
+  },
+  footerLink: {
+    color: colors.text,
+    fontWeight: '600',
+  },
+});
+===== src/app/scheduled.js
+import { router, useFocusEffect } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { use, useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import DrawerScreen from '@/components/DrawerScreen';
+import { MessageAttachments } from '@/components/ChatAttachments';
+import { ChevronRightIcon } from '@/components/HomeIcons';
+import MonthCalendar, { toDayKey } from '@/components/MonthCalendar';
+import PageHeader from '@/components/PageHeader';
+import { MyUserContext } from '@/config/Contexts';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
+import { getErrorMessage } from '@/services/auth';
+import { getProjects } from '@/services/projects';
+import { formatScheduleTime, getScheduleDayKey, getSchedules } from '@/services/schedules';
+
+const DetailRow = ({ label, value }) => {
+  const styles = useThemeStyles(createStyles);
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue} selectable>{value}</Text>
+    </View>
+  );
+};
+
+const getScheduleAttachments = (schedule) => {
+  const attachments = schedule.attachments ?? schedule.media ?? schedule.files;
+  if (Array.isArray(attachments)) {
+    return attachments.map((file, index) => ({
+      ...file,
+      id: file.id ?? `${schedule.id}-attachment-${index}`,
+      url: file.url ?? file.uri ?? file.image_url,
+      mime_type: file.mime_type ?? file.mimeType ?? 'image/jpeg',
+      file_name: file.file_name ?? file.fileName ?? `Ảnh ${index + 1}`,
+    }));
+  }
+
+  const imageUrls = schedule.image_urls ?? schedule.images ?? (schedule.image_url ? [schedule.image_url] : []);
+  if (!Array.isArray(imageUrls)) return [];
+  return imageUrls.map((image, index) => ({
+    id: `${schedule.id}-image-${index}`,
+    url: typeof image === 'string' ? image : image.url ?? image.uri,
+    mime_type: typeof image === 'object' ? image.mime_type ?? image.mimeType ?? 'image/jpeg' : 'image/jpeg',
+    file_name: typeof image === 'object' ? image.file_name ?? image.fileName ?? `Ảnh ${index + 1}` : `Ảnh ${index + 1}`,
+  })).filter((image) => image.url);
+};
+
+export default function Scheduled() {
+  return (
+    <DrawerScreen>
+      {(menuButton) => <ScheduledContent menuButton={menuButton} />}
+    </DrawerScreen>
+  );
+}
+
+function ScheduledContent({ menuButton }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
+  const [user] = use(MyUserContext);
+  const token = user?.access_token;
+  const [view, setView] = useState(() => {
+    const today = new Date();
+    return { year: today.getFullYear(), month: today.getMonth() };
+  });
+  const [selectedKey, setSelectedKey] = useState(() => toDayKey(new Date()));
+  const [schedules, setSchedules] = useState(null);
+  const [projectNames, setProjectNames] = useState({});
+  const [selectedId, setSelectedId] = useState(null);
+  const [error, setError] = useState('');
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return undefined;
+      let active = true;
+      Promise.all([getSchedules(token), getProjects(token)])
+        .then(([scheduleItems, projects]) => {
+          if (!active) return;
+          setSchedules(scheduleItems);
+          setProjectNames(Object.fromEntries(projects.map((project) => [project.id, project.title])));
+          setError('');
+        })
+        .catch((err) => {
+          if (!active) return;
+          setSchedules([]);
+          setError(getErrorMessage(err));
+        });
+      return () => {
+        active = false;
+      };
+    }, [token])
+  );
+
+  const markedKeys = useMemo(() => new Set((schedules ?? []).map(getScheduleDayKey)), [schedules]);
+  const daySchedules = useMemo(
+    () =>
+      (schedules ?? [])
+        .filter((schedule) => getScheduleDayKey(schedule) === selectedKey)
+        .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at)),
+    [schedules, selectedKey]
+  );
+  const selected = daySchedules.find((schedule) => schedule.id === selectedId);
+  const selectedAttachments = selected ? getScheduleAttachments(selected) : [];
+
+  const changeMonth = (delta) => {
+    setView(({ year, month }) => {
+      const next = new Date(year, month + delta, 1);
+      return { year: next.getFullYear(), month: next.getMonth() };
+    });
+  };
+
+  const selectDay = (key) => {
+    setSelectedKey(key);
+    setSelectedId(null);
+  };
+
+  const projectName = selected ? projectNames[selected.conversation_id] : null;
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
+      <PageHeader title="Đã lên lịch" left={menuButton} />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.page}>
+          <MonthCalendar
+            year={view.year}
+            month={view.month}
+            selectedKey={selectedKey}
+            markedKeys={markedKeys}
+            onSelectDay={selectDay}
+            onChangeMonth={changeMonth}
+          />
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {schedules === null ? <ActivityIndicator color={colors.text} style={styles.loading} /> : null}
+
+          {schedules?.length === 0 && !error ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>Chưa có lịch nào</Text>
+              <Text style={styles.emptyBody}>Mở một dự án và đặt lịch ngay trong Chat, lịch sẽ hiện ở đây.</Text>
+            </View>
+          ) : null}
+
+          {schedules?.length > 0 && daySchedules.length === 0 ? (
+            <Text style={styles.noSchedule}>Không có lịch trong ngày này</Text>
+          ) : null}
+
+          {daySchedules.length > 0 ? (
+            <View style={styles.card}>
+              {daySchedules.map((schedule, index) => (
+                <Pressable
+                  key={schedule.id}
+                  onPress={() => setSelectedId(schedule.id)}
+                  style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel={schedule.task_name}
+                  aria-selected={schedule.id === selectedId}
+                >
+                  <View style={[styles.rowBody, index > 0 && styles.rowDivider]}>
+                    <Text style={styles.rowTime}>{formatScheduleTime(schedule).slice(11)}</Text>
+                    <Text style={styles.rowLabel} numberOfLines={1}>{schedule.task_name}</Text>
+                    <ChevronRightIcon size={20} color={colors.textSecondary} />
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
+          {selected ? (
+            <View style={styles.detail}>
+              <DetailRow label="Tên" value={selected.task_name} />
+              <DetailRow label="Thời gian" value={formatScheduleTime(selected)} />
+              {selected.platforms.length > 0 ? (
+                <DetailRow label="Nền tảng" value={selected.platforms.join(', ')} />
+              ) : null}
+              {selected.content || selectedAttachments.length > 0 ? (
+                <View style={styles.contentSection}>
+                  <Text style={styles.detailLabel}>Nội dung</Text>
+                  {selected.content ? <Text style={styles.detailValue} selectable>{selected.content}</Text> : null}
+                  {selectedAttachments.length > 0 ? <MessageAttachments attachments={selectedAttachments} /> : null}
+                </View>
+              ) : null}
+              <Pressable
+                onPress={() => router.replace(`/projects/${selected.conversation_id}`)}
+                disabled={!projectName}
+                style={({ pressed }) => [styles.projectRow, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel={`Mở dự án ${projectName ?? ''}`}
+              >
+                <View style={styles.projectText}>
+                  <Text style={styles.detailLabel}>Dự án</Text>
+                  <Text style={styles.detailValue} numberOfLines={1}>
+                    {projectName || 'Không tìm thấy dự án'}
+                  </Text>
+                </View>
+                {projectName ? <ChevronRightIcon size={20} color={colors.textSecondary} /> : null}
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 40,
+  },
+  page: {
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+  },
+  loading: {
+    marginTop: 32,
+  },
+  error: {
+    color: colors.error,
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 24,
+  },
+  empty: {
+    alignItems: 'center',
+    marginTop: 32,
+    paddingHorizontal: 16,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  emptyBody: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  noSchedule: {
+    color: colors.textSecondary,
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 24,
+  },
+  card: {
+    marginTop: 16,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+  },
+  row: {
+    flexDirection: 'row',
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  rowBody: {
+    flex: 1,
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+  },
+  rowDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.divider,
+  },
+  rowTime: {
+    color: colors.textSecondary,
+    fontSize: 16,
+  },
+  rowLabel: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 17,
+  },
+  detail: {
+    gap: 12,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+  },
+  detailRow: {
+    gap: 4,
+  },
+  contentSection: {
+    gap: 8,
+  },
+  detailLabel: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  detailValue: {
+    color: colors.text,
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  projectRow: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  projectText: {
+    flex: 1,
+    gap: 4,
+  },
+});
+===== src/app/settings.js
+import { router } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { BackIcon } from '@/components/HomeIcons';
+import { useAppTheme, useThemeColors, useThemeStyles } from '@/constants/theme';
+
+export default function Settings() {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+  const { theme, setTheme } = useAppTheme();
+  const insets = useSafeAreaInsets();
+
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  };
+
+  return (
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
+      <View style={styles.header}>
+        <Pressable
+          onPress={goBack}
+          style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Quay lại"
+        >
+          <BackIcon size={22} />
+        </Pressable>
+        <Text style={styles.title}>Cài đặt</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
+      <View style={styles.content}>
+        <Text style={styles.sectionTitle}>Giao diện</Text>
+        <Text style={styles.description}>Chọn giao diện bạn muốn sử dụng.</Text>
+        <View style={styles.themeCard}>
+          {[
+            { value: 'light', label: 'Sáng' },
+            { value: 'dark', label: 'Tối' },
+          ].map(({ value, label }) => {
+            const selected = theme === value;
+            return (
+              <Pressable
+                key={value}
+                onPress={() => setTheme(value)}
+                style={[styles.themeChoice, selected && styles.themeChoiceSelected]}
+                accessibilityRole="radio"
+                accessibilityLabel={`Giao diện ${label.toLowerCase()}`}
+                accessibilityState={{ selected }}
+              >
+                <Text style={[styles.themeChoiceText, selected && styles.themeChoiceTextSelected]}>{label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.backgroundDeep,
+  },
+  header: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.divider,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+  },
+  title: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  content: {
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+    padding: 20,
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '600',
+  },
+  description: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    marginTop: 6,
+  },
+  themeCard: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18,
+    padding: 6,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+  },
+  themeChoice: {
+    flex: 1,
+    minHeight: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+  },
+  themeChoiceSelected: {
+    backgroundColor: colors.primary,
+  },
+  themeChoiceText: {
+    color: colors.textSecondary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  themeChoiceTextSelected: {
+    color: colors.onPrimary,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+});
+===== src/app/agents/index.js
+import { useFocusEffect } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { use, useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  LayoutAnimation,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import AgentForm from '@/components/AgentForm';
+import AuthButton from '@/components/AuthButton';
+import DrawerScreen from '@/components/DrawerScreen';
+import {
+  AgentIcon,
+  PencilIcon,
+  PluginIcon,
+  TrashIcon,
+} from '@/components/HomeIcons';
+import PageHeader from '@/components/PageHeader';
+import { MyUserContext } from '@/config/Contexts';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
+import {
+  deleteAgent,
+  getAgentErrorMessage,
+  getAgentsByUser,
+  testSavedAgentConnection,
+} from '@/services/agents';
+
+export default function Agents() {
+  return (
+    <DrawerScreen>
+      {(menuButton) => <AgentsContent menuButton={menuButton} />}
+    </DrawerScreen>
+  );
+}
+
+function AgentsContent({ menuButton }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
+  const [user] = use(MyUserContext);
+  const token = user?.access_token;
+  const userId = user?.id;
+
+  const [agents, setAgents] = useState(null);
+  const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingAgent, setEditingAgent] = useState(null);
+
+  // Lưu trạng thái test kết nối cho từng agent: { [agentId]: { ok: bool, message: str } }
+  const [testResults, setTestResults] = useState({});
+  const [testingId, setTestingId] = useState(null);
+
+  const loadAgents = useCallback(
+    async (isPullRefresh = false) => {
+      if (!token) return;
+      if (isPullRefresh) setRefreshing(true);
+
+      try {
+        const data = await getAgentsByUser(token, userId);
+        setAgents(data || []);
+        setError('');
+      } catch (err) {
+        setError(getAgentErrorMessage(err));
+      } finally {
+        setRefreshing(false);
+      }
+    },
+    [token, userId]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      loadAgents();
+    }, [loadAgents])
+  );
+
+  const toggleForm = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setEditingAgent(null);
+    setFormOpen((open) => !open);
+  };
+
+  const handleEditAgent = (agent) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setEditingAgent(agent);
+    setFormOpen(true);
+  };
+
+  const handleDeleteAgent = (agent) => {
+    Alert.alert(
+      'Xác nhận xóa',
+      `Bạn có chắc chắn muốn xóa agent "${agent.name}" không?`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteAgent(token, agent.id);
+              await loadAgents();
+            } catch (err) {
+              Alert.alert('Lỗi xóa Agent', getAgentErrorMessage(err));
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleTestAgent = async (agent) => {
+    setTestingId(agent.id);
+    setTestResults((prev) => ({ ...prev, [agent.id]: null }));
+
+    try {
+      const res = await testSavedAgentConnection(token, agent.id);
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setTestResults((prev) => ({
+        ...prev,
+        [agent.id]: {
+          ok: res.ok,
+          message: res.ok ? 'Kết nối GoClaw thành công' : (res.message || 'Không kết nối được GoClaw'),
+        },
+      }));
+    } catch (err) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setTestResults((prev) => ({
+        ...prev,
+        [agent.id]: {
+          ok: false,
+          message: getAgentErrorMessage(err),
+        },
+      }));
+    } finally {
+      setTestingId(null);
+    }
+  };
+
+  const handleSaved = async () => {
+    await loadAgents();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setFormOpen(false);
+    setEditingAgent(null);
+  };
+
+  const handleCancelForm = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setFormOpen(false);
+    setEditingAgent(null);
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
+      <PageHeader title="Agent" left={menuButton} />
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => loadAgents(true)}
+              tintColor={colors.text}
+              colors={[colors.text]}
+            />
+          }
+        >
+          <View style={styles.page}>
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            {agents === null && !error ? (
+              <ActivityIndicator color={colors.text} style={styles.loading} />
+            ) : null}
+
+            {/* Form Thêm mới / Chỉnh sửa */}
+            {formOpen ? (
+              <View style={styles.formContainer}>
+                <AgentForm
+                  agent={editingAgent}
+                  onSaved={handleSaved}
+                  onCancel={handleCancelForm}
+                />
+              </View>
+            ) : (
+              <View style={styles.topAction}>
+                <AuthButton title="+ Thêm Agent" onPress={toggleForm} />
+              </View>
+            )}
+
+            {/* Trạng thái trống */}
+            {agents?.length === 0 && !formOpen ? (
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconBox}>
+                  <AgentIcon size={36} color={colors.textMuted} />
+                </View>
+                <Text style={styles.emptyTitle}>Chưa có Agent nào</Text>
+                <Text style={styles.emptySubtitle}>
+                  Thêm máy chủ GoClaw Agent để bắt đầu tự động hóa quy trình dựng và xuất bản video.
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Danh sách Agent Cards */}
+            {agents?.length > 0 ? (
+              <View style={styles.list}>
+                {agents.map((agent) => {
+                  const isTesting = testingId === agent.id;
+                  const testStatus = testResults[agent.id];
+
+                  return (
+                    <View key={agent.id} style={styles.agentCard}>
+                      {/* Header của Card */}
+                      <View style={styles.cardHeader}>
+                        <View style={styles.cardAvatar}>
+                          <AgentIcon size={22} color={colors.primary} />
+                        </View>
+                        <View style={styles.cardTitleBox}>
+                          <Text style={styles.cardTitle} numberOfLines={1}>
+                            {agent.name}
+                          </Text>
+                          <View style={styles.domainRow}>
+                            <PluginIcon size={13} color={colors.textMuted} />
+                            <Text style={styles.domainText} numberOfLines={1}>
+                              {agent.domain || 'Chưa có domain'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Nút Sửa & Xóa */}
+                        <View style={styles.cardControls}>
+                          <Pressable
+                            style={({ pressed }) => [styles.ctrlBtn, pressed && styles.pressed]}
+                            onPress={() => handleEditAgent(agent)}
+                            accessibilityLabel="Sửa"
+                            hitSlop={8}
+                          >
+                            <PencilIcon size={17} color={colors.textSecondary} />
+                          </Pressable>
+                          <Pressable
+                            style={({ pressed }) => [styles.ctrlBtn, pressed && styles.pressed]}
+                            onPress={() => handleDeleteAgent(agent)}
+                            accessibilityLabel="Xóa"
+                            hitSlop={8}
+                          >
+                            <TrashIcon size={17} color={colors.error} />
+                          </Pressable>
+                        </View>
+                      </View>
+
+                      {/* Thông tin Key bảo mật */}
+                      <View style={styles.keyInfoRow}>
+                        <View style={styles.keyBadge}>
+                          <Text style={styles.keyBadgeLabel}>API Key:</Text>
+                          <Text style={styles.keyBadgeVal}>
+                            {agent.has_api_key ? agent.masked_api_key : 'Chưa cấu hình'}
+                          </Text>
+                        </View>
+                        {agent.has_agent_key ? (
+                          <View style={styles.keyBadge}>
+                            <Text style={styles.keyBadgeLabel}>Agent Key:</Text>
+                            <Text style={styles.keyBadgeVal}>{agent.masked_agent_key}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      {/* Trạng thái Test Kết Nối (Pill thanh lịch, không dùng icon tick to giả tạo) */}
+                      {testStatus ? (
+                        <View
+                          style={[
+                            styles.statusPill,
+                            testStatus.ok ? styles.statusPillOk : styles.statusPillFail,
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.statusDot,
+                              testStatus.ok ? styles.statusDotOk : styles.statusDotFail,
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              styles.statusText,
+                              testStatus.ok ? styles.statusTextOk : styles.statusTextFail,
+                            ]}
+                          >
+                            {testStatus.message}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      {/* Nút Test kết nối của thẻ */}
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.testCardBtn,
+                          pressed && styles.pressed,
+                          isTesting && styles.btnDisabled,
+                        ]}
+                        onPress={() => handleTestAgent(agent)}
+                        disabled={isTesting}
+                      >
+                        {isTesting ? (
+                          <ActivityIndicator size="small" color={colors.text} />
+                        ) : (
+                          <Text style={styles.testCardBtnText}>Kiểm tra kết nối</Text>
+                        )}
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : null}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  flex: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 48,
+  },
+  page: {
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+  },
+  topAction: {
+    marginBottom: 20,
+  },
+  formContainer: {
+    backgroundColor: colors.surface,
+    padding: 18,
+    borderRadius: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: colors.divider,
+  },
+  loading: {
+    marginVertical: 32,
+  },
+  error: {
+    color: colors.error,
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    paddingHorizontal: 24,
+  },
+  emptyIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: colors.surfaceRaised,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  emptySubtitle: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 19,
+  },
+  list: {
+    gap: 14,
+  },
+  agentCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.divider,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cardAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceRaised,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  cardTitleBox: {
+    flex: 1,
+    gap: 2,
+  },
+  cardTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  domainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  domainText: {
+    color: colors.textMuted,
+    fontSize: 12,
+  },
+  cardControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  ctrlBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  keyInfoRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.divider,
+  },
+  keyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.surfaceRaised,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  keyBadgeLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  keyBadgeVal: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
+  testCardBtn: {
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.divider,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  testCardBtnText: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  btnDisabled: {
+    opacity: 0.6,
+  },
+  /* Modern Status Pill */
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    marginTop: 10,
+    borderWidth: 1,
+  },
+  statusPillOk: {
+    backgroundColor: colors.successSoft,
+    borderColor: colors.successBorder,
+  },
+  statusPillFail: {
+    backgroundColor: colors.errorSoft,
+    borderColor: colors.errorBorder,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusDotOk: {
+    backgroundColor: colors.success,
+  },
+  statusDotFail: {
+    backgroundColor: colors.error,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  statusTextOk: {
+    color: colors.success,
+  },
+  statusTextFail: {
+    color: colors.error,
+  },
+});
+===== src/app/agents/new.js
+import { router } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import AgentForm from '@/components/AgentForm';
+import PageHeader from '@/components/PageHeader';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
+
+// Trang riêng để thêm Agent ngay từ form tạo dự án; trang Agent thì hiện form ngay trong danh sách
+export default function NewAgent() {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
+      <PageHeader title="Thêm Agent" />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.page}>
+            <AgentForm onSaved={() => router.back()} />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.backgroundDeep,
+  },
+  flex: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 40,
+  },
+  page: {
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+  },
+});
+===== src/app/projects/new.js
+import { router, useFocusEffect } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { use, useCallback, useState } from 'react';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import AuthButton from '@/components/AuthButton';
+import AuthField from '@/components/AuthField';
+import DrawerScreen from '@/components/DrawerScreen';
+import { AgentIcon, CheckIcon, FolderIcon } from '@/components/HomeIcons';
+import PageHeader from '@/components/PageHeader';
+import { MyUserContext } from '@/config/Contexts';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
+import { getAgents } from '@/services/agents';
+import { getErrorMessage } from '@/services/auth';
+import { createProject } from '@/services/projects';
+
+const MAX_NAME_LENGTH = 255;
+
+export default function NewProject() {
+  return (
+    <DrawerScreen>
+      {(menuButton) => <NewProjectContent menuButton={menuButton} />}
+    </DrawerScreen>
+  );
+}
+
+function NewProjectContent({ menuButton }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
+  const [user] = use(MyUserContext);
+  const token = user?.access_token;
+  const [name, setName] = useState('');
+  const [nameError, setNameError] = useState('');
+  const [agents, setAgents] = useState(null);
+  const [agentId, setAgentId] = useState(null);
+  const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Tải lại khi quay về từ form thêm Agen
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return undefined;
+      let active = true;
+      getAgents(token)
+        .then((items) => {
+          if (!active) return;
+          setAgents(items);
+          setAgentId((current) => current ?? items[0]?.id ?? null);
+        })
+        .catch((error) => {
+          if (!active) return;
+          setAgents([]);
+          setFormError(getErrorMessage(error));
+        });
+      return () => {
+        active = false;
+      };
+    }, [token])
+  );
+
+  const handleCreate = async () => {
+    const trimmedName = name.trim();
+    setNameError(trimmedName ? '' : 'Vui lòng nhập tên dự án');
+    setFormError('');
+    if (!trimmedName) return;
+    if (!agentId) {
+      setFormError('Cần có một Agent để tạo dự án');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const project = await createProject(token, trimmedName, agentId);
+      router.replace(`/projects/${project.id}`);
+    } catch (error) {
+      setFormError(getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
+      <PageHeader title="Dự án mới" left={menuButton} />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.page}>
+            <AuthField
+              label="Tên dự án"
+              icon={<FolderIcon size={20} color={colors.textMuted} />}
+              error={nameError}
+              value={name}
+              onChangeText={setName}
+              placeholder="Nhập tên dự án"
+              maxLength={MAX_NAME_LENGTH}
+              returnKeyType="done"
+              onSubmitEditing={handleCreate}
+            />
+
+            <Text style={styles.sectionTitle}>Agent</Text>
+            {agents === null ? <ActivityIndicator color={colors.text} style={styles.loading} /> : null}
+            {agents?.length === 0 ? (
+              <View style={styles.noAgents}>
+                <Text style={styles.noAgentsText}>Bạn chưa có Agent nào. Hãy thêm Agent trước khi tạo dự án.</Text>
+                <AuthButton title="+ Thêm Agent" variant="secondary" onPress={() => router.push('/agents/new')} />
+              </View>
+            ) : null}
+            {agents?.length > 0 ? (
+              <View style={styles.card}>
+                {agents.map((agent, index) => (
+                  <Pressable
+                    key={agent.id}
+                    onPress={() => setAgentId(agent.id)}
+                    style={({ pressed }) => [styles.agentRow, pressed && styles.pressed]}
+                    accessibilityRole="radio"
+                    accessibilityLabel={agent.name}
+                    aria-checked={agent.id === agentId}
+                  >
+                    <AgentIcon size={22} />
+                    <View style={[styles.agentBody, index > 0 && styles.agentDivider]}>
+                      <Text style={styles.agentName} numberOfLines={1}>{agent.name}</Text>
+                      {agent.id === agentId ? <CheckIcon size={20} /> : null}
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+
+            {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+            <View style={styles.submit}>
+              <AuthButton title="Tạo dự án" onPress={handleCreate} loading={saving} />
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  flex: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 40,
+  },
+  page: {
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  loading: {
+    marginVertical: 16,
+  },
+  noAgents: {
+    gap: 12,
+  },
+  noAgentsText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  card: {
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+  },
+  agentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  agentBody: {
+    flex: 1,
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  agentDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.divider,
+  },
+  agentName: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 17,
+  },
+  formError: {
+    color: colors.error,
+    fontSize: 14,
+    textAlign: 'center',
+    marginTop: 16,
+  },
+  submit: {
+    marginTop: 24,
+  },
+});
+===== src/app/projects/[id]/index.js
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { use, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { MessageAttachments, PendingAttachments } from '@/components/ChatAttachments';
+import DrawerScreen from '@/components/DrawerScreen';
+import { AgentIcon, CalendarIcon, MicIcon, PlusIcon, SendIcon } from '@/components/HomeIcons';
+import PageHeader from '@/components/PageHeader';
+import { MyUserContext } from '@/config/Contexts';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
+import { MAX_FILES, pickMedia } from '@/services/attachments';
+import { getErrorMessage } from '@/services/auth';
+import {
+  getMessages,
+  getProject,
+  markProjectOpened,
+  sendMessage,
+  sendMessageWithFiles,
+} from '@/services/projects';
+
+const POLL_INTERVAL = 3000;
+const MAX_MESSAGE_LENGTH = 20000;
+const IN_PROGRESS = ['pending', 'processing'];
+
+const MessageBubble = ({ message, showScheduleButton, onLongPress, onSchedule }) => {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
+  const attachments = message.attachments ?? [];
+  if (message.role === 'user') {
+    return (
+      <View style={styles.userMessage}>
+        {attachments.length > 0 ? <MessageAttachments attachments={attachments} align="flex-end" /> : null}
+        {message.content ? (
+          <View style={styles.userBubble}>
+            <Text style={styles.messageText} selectable>{message.content}</Text>
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+  if (IN_PROGRESS.includes(message.status)) {
+    return (
+      <View style={styles.replyPending}>
+        <ActivityIndicator size="small" color={colors.textSecondary} />
+        <Text style={styles.pendingText}>Agent đang trả lời…</Text>
+      </View>
+    );
+  }
+  if (message.status === 'failed') {
+    return <Text style={styles.failedText}>{message.error_message || 'Agent không trả lời được'}</Text>;
+  }
+  const canSchedule = Boolean(message.content?.trim() || attachments.length > 0);
+  return (
+    <View style={styles.replyMessage}>
+      <Pressable
+        onLongPress={onLongPress}
+        delayLongPress={350}
+        disabled={message.status !== 'completed' || !canSchedule}
+        accessibilityRole="button"
+        accessibilityLabel="Nhấn giữ để đặt lịch tin nhắn này"
+      >
+        {attachments.length > 0 ? <MessageAttachments attachments={attachments} /> : null}
+        {message.content ? <Text style={styles.messageText}>{message.content}</Text> : null}
+      </Pressable>
+      {showScheduleButton ? (
+        <Pressable
+          onPress={onSchedule}
+          style={({ pressed }) => [styles.scheduleMessageButton, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Đặt lịch nội dung này"
+        >
+          <CalendarIcon size={15} color={colors.textSecondary} />
+          <Text style={styles.scheduleMessageButtonText}>Đặt lịch</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+};
+
+export default function ProjectChat() {
+  const { id } = useLocalSearchParams();
+
+  return (
+    <DrawerScreen>
+      {(menuButton) => <ChatContent id={id} menuButton={menuButton} />}
+    </DrawerScreen>
+  );
+}
+
+function ChatContent({ id, menuButton }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
+  const [user] = use(MyUserContext);
+  const token = user?.access_token;
+  const [project, setProject] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [nextBefore, setNextBefore] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [text, setText] = useState('');
+  const [files, setFiles] = useState([]);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
+  const [scheduleActionMessageId, setScheduleActionMessageId] = useState(null);
+  const loadingOlder = useRef(false);
+  const inputRef = useRef(null);
+
+  const loadMessages = useCallback(async () => {
+    const page = await getMessages(token, id);
+    setMessages(page.items);
+    setNextBefore(page.next_before);
+  }, [token, id]);
+
+  // Chỉ đọc dự án đã có và ghi lại lần mở, không tạo dự án mới
+  useEffect(() => {
+    if (!token) return;
+    getProject(token, id)
+      .then((item) => {
+        setProject(item);
+        return markProjectOpened(token, item.id);
+      })
+      .catch((error) => setLoadError(getErrorMessage(error)));
+  }, [token, id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return;
+      loadMessages()
+        .catch((error) => setLoadError(getErrorMessage(error)))
+        .finally(() => setLoading(false));
+    }, [token, loadMessages])
+  );
+
+  // Câu trả lời đang chạy trong nền (vd lịch vừa đến giờ): hỏi lại đến khi xong
+  const hasReplyInProgress = !sending && messages.some((message) => IN_PROGRESS.includes(message.status));
+  useEffect(() => {
+    if (!hasReplyInProgress) return undefined;
+    const timer = setInterval(() => {
+      loadMessages().catch(() => {});
+    }, POLL_INTERVAL);
+    return () => clearInterval(timer);
+  }, [hasReplyInProgress, loadMessages]);
+
+  const loadOlder = async () => {
+    if (!nextBefore || loadingOlder.current) return;
+    loadingOlder.current = true;
+    try {
+      const page = await getMessages(token, id, nextBefore);
+      setMessages((current) => [...current, ...page.items]);
+      setNextBefore(page.next_before);
+    } catch (error) {
+      setSendError(getErrorMessage(error));
+    } finally {
+      loadingOlder.current = false;
+    }
+  };
+
+  const handlePickFiles = async () => {
+    const remaining = MAX_FILES - files.length;
+    if (remaining <= 0) {
+      setSendError(`Mỗi tin gửi tối đa ${MAX_FILES} file`);
+      return;
+    }
+    setSendError('');
+    try {
+      const picked = await pickMedia(remaining);
+      setFiles((current) => {
+        const newFiles = picked.files.filter((file) => !current.some((item) => item.uri === file.uri));
+        return [...current, ...newFiles];
+      });
+      if (picked.error) setSendError(picked.error);
+    } catch {
+      setSendError('Không mở được thư viện ảnh');
+    }
+  };
+
+  const handleSend = async () => {
+    const content = text.trim();
+    if ((!content && files.length === 0) || sending) return;
+
+    const sentFiles = files;
+    const localUserMessage = {
+      id: 'local-user',
+      role: 'user',
+      content,
+      status: 'completed',
+      attachments: sentFiles.map((file) => ({
+        id: file.uri,
+        file_name: file.fileName,
+        mime_type: file.mimeType,
+        url: file.uri,
+      })),
+    };
+    const localReply = { id: 'local-reply', role: 'assistant', status: 'processing' };
+    setMessages((current) => [localReply, localUserMessage, ...current]);
+    setText('');
+    setFiles([]);
+    setSendError('');
+    setSending(true);
+    try {
+      const result = sentFiles.length > 0
+        ? await sendMessageWithFiles(token, id, content, sentFiles)
+        : await sendMessage(token, id, content);
+      setMessages((current) => [
+        ...(result.assistant_message ? [result.assistant_message] : []),
+        result.user_message,
+        ...current.filter((message) => !message.id.startsWith('local-')),
+      ]);
+    } catch (error) {
+      setMessages((current) => current.filter((message) => !message.id.startsWith('local-')));
+      setText(content);
+      setFiles(sentFiles);
+      setSendError(getErrorMessage(error));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const canSend = (text.trim().length > 0 || files.length > 0) && !sending;
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
+      <PageHeader title={project?.title || ''} left={menuButton} />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {loading ? (
+          <View style={styles.center}>
+            <ActivityIndicator color={colors.text} />
+          </View>
+        ) : null}
+        {!loading && loadError ? (
+          <View style={styles.center}>
+            <Text style={styles.failedText}>{loadError}</Text>
+          </View>
+        ) : null}
+        {!loading && !loadError && messages.length === 0 ? (
+          <View style={styles.center}>
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}><AgentIcon size={24} /></View>
+              <Text style={styles.emptyTitle}>Bắt đầu cuộc trò chuyện</Text>
+              <Text style={styles.emptyText}>Mô tả video bạn muốn tạo. Bạn cũng có thể gửi ảnh hoặc video để Agent tham khảo.</Text>
+            </View>
+          </View>
+        ) : null}
+        {!loading && !loadError && messages.length > 0 ? (
+          <FlatList
+            style={styles.flex}
+            inverted
+            data={messages}
+            keyExtractor={(message) => message.id}
+            renderItem={({ item }) => (
+              <MessageBubble
+                message={item}
+                showScheduleButton={String(scheduleActionMessageId) === String(item.id)}
+                onLongPress={() => setScheduleActionMessageId(item.id)}
+                onSchedule={() => router.push({
+                  pathname: '/projects/[id]/schedule',
+                  params: { id, contentMessageId: item.id },
+                })}
+              />
+            )}
+            contentContainerStyle={styles.messages}
+            onEndReached={loadOlder}
+            onEndReachedThreshold={0.3}
+            keyboardShouldPersistTaps="handled"
+          />
+        ) : null}
+
+        {sendError ? <Text style={styles.sendError}>{sendError}</Text> : null}
+        {files.length > 0 ? (
+          <View>
+            <PendingAttachments
+              files={files}
+              onRemove={(uri) => setFiles((current) => current.filter((file) => file.uri !== uri))}
+            />
+          </View>
+        ) : null}
+        <View style={styles.composerWrap}>
+          <View style={styles.composer}>
+            <TextInput
+              ref={inputRef}
+              style={styles.input}
+              value={text}
+              onChangeText={setText}
+              placeholder="Nhập tin nhắn"
+              placeholderTextColor={colors.textMuted}
+              selectionColor={colors.primary}
+              accessibilityLabel="Nhập tin nhắn"
+              maxLength={MAX_MESSAGE_LENGTH}
+              multiline
+            />
+            <View style={styles.composerToolbar}>
+              <View style={styles.composerActions}>
+                <Pressable
+                  onPress={handlePickFiles}
+                  style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Thêm ảnh hoặc video"
+                >
+                  <PlusIcon size={20} />
+                </Pressable>
+                <Pressable
+                  onPress={() => inputRef.current?.focus()}
+                  disabled={sending}
+                  style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Mở bàn phím để nhập bằng giọng nói"
+                  accessibilityState={{ disabled: sending }}
+                >
+                  <MicIcon size={20} />
+                </Pressable>
+              </View>
+              <Pressable
+                onPress={handleSend}
+                disabled={!canSend}
+                style={({ pressed }) => [styles.sendButton, !canSend && styles.sendButtonDisabled, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Gửi"
+                accessibilityState={{ disabled: !canSend }}
+              >
+                <SendIcon size={21} color={canSend ? colors.onPrimary : colors.textMuted} />
+              </Pressable>
+            </View>
+          </View>
+          <Text style={styles.composerHint}>AI có thể mắc lỗi. Hãy kiểm tra lại thông tin quan trọng.</Text>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  flex: {
+    flex: 1,
+  },
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyState: {
+    alignItems: 'center',
+    maxWidth: 340,
+  },
+  emptyIcon: {
+    width: 52,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptyText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  messages: {
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  userMessage: {
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  replyMessage: {
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  scheduleMessageButton: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    borderRadius: 17,
+    backgroundColor: colors.surface,
+  },
+  scheduleMessageButtonText: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  userBubble: {
+    maxWidth: '85%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+  },
+  messageText: {
+    color: colors.text,
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  replyPending: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pendingText: {
+    color: colors.textSecondary,
+    fontSize: 14,
+  },
+  failedText: {
+    color: colors.error,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  sendError: {
+    color: colors.error,
+    fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  composer: {
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 8,
+    borderRadius: 26,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.divider,
+    backgroundColor: colors.surface,
+    shadowColor: '#000000',
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  composerWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 2,
+  },
+  composerToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  composerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.divider,
+  },
+  scheduleAction: {
+    height: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 11,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.divider,
+  },
+  scheduleLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  composerHint: {
+    color: colors.textMuted,
+    fontSize: 11,
+    textAlign: 'center',
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  input: {
+    width: '100%',
+    minHeight: 42,
+    maxHeight: 140,
+    paddingHorizontal: 4,
+    paddingTop: 9,
+    paddingBottom: 9,
+    color: colors.text,
+    fontSize: 16,
+    textAlignVertical: 'top',
+  },
+  sendButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    backgroundColor: colors.primary,
+  },
+  sendButtonDisabled: {
+    backgroundColor: colors.surface,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+});
+===== src/app/projects/[id]/schedule.js
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { use, useCallback, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import AuthButton from '@/components/AuthButton';
+import { MessageAttachments } from '@/components/ChatAttachments';
+import { CheckIcon } from '@/components/HomeIcons';
+import MonthCalendar from '@/components/MonthCalendar';
+import PageHeader from '@/components/PageHeader';
+import TimePickerSheet from '@/components/TimePickerSheet';
+import { MyUserContext } from '@/config/Contexts';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
+import { getErrorMessage } from '@/services/auth';
+import { createSchedule, getScheduleNow, getSchedules, PLATFORMS, validateScheduleTime } from '@/services/schedules';
+import { getMessages } from '@/services/projects';
+
+const NO_MARKS = new Set();
+const TIMEZONE = 'Asia/Ho_Chi_Minh';
+const MAX_MESSAGE_PAGES = 20;
+const pad = (value) => String(value).padStart(2, '0');
+
+const getConversationMessages = async (token, conversationId) => {
+  const messages = [];
+  let before;
+  for (let pageNumber = 0; pageNumber < MAX_MESSAGE_PAGES; pageNumber += 1) {
+    const page = await getMessages(token, conversationId, before);
+    messages.push(...page.items);
+    if (!page.next_before) break;
+    before = page.next_before;
+  }
+  return messages;
+};
+
+const getMessageLabel = (message) => {
+  const text = message.content?.trim();
+  if (text) return text;
+  const attachments = message.attachments ?? [];
+  return attachments.length ? `Nội dung có ${attachments.length} tệp đính kèm` : 'Nội dung không có văn bản';
+};
+
+export default function NewSchedule() {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
+  const { id, contentMessageId } = useLocalSearchParams();
+  const [user] = use(MyUserContext);
+  const [now] = useState(getScheduleNow);
+  const [view, setView] = useState({ year: now.year, month: now.month });
+  const [platforms, setPlatforms] = useState([]);
+  const [availableMessages, setAvailableMessages] = useState(null);
+  const [selectedContentId, setSelectedContentId] = useState(null);
+  const [contentError, setContentError] = useState('');
+  const [contentLoadError, setContentLoadError] = useState('');
+  const [selectedKey, setSelectedKey] = useState(null);
+  const [hour, setHour] = useState((now.hour + 1) % 24);
+  const [minute, setMinute] = useState(0);
+  const [pickingTime, setPickingTime] = useState(false);
+  const [platformError, setPlatformError] = useState('');
+  const [timeError, setTimeError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const saved = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.access_token || !id) return undefined;
+      let active = true;
+      setAvailableMessages(null);
+      Promise.all([
+        getConversationMessages(user.access_token, id),
+        getSchedules(user.access_token),
+      ])
+        .then(([messages, schedules]) => {
+          if (!active) return;
+          const selected = messages.find((message) => String(message.id) === String(contentMessageId));
+          const alreadyScheduled = schedules.some((schedule) =>
+            String(schedule.conversation_id) === String(id)
+            && String(schedule.content_message_id) === String(contentMessageId)
+          );
+          const available = selected
+            && selected.role === 'assistant'
+            && selected.status === 'completed'
+            && (selected.content?.trim() || selected.attachments?.length > 0)
+            && !alreadyScheduled
+            ? [selected]
+            : [];
+          setAvailableMessages(available);
+          setSelectedContentId(available[0]?.id ?? null);
+          setContentLoadError(available.length ? '' : alreadyScheduled
+            ? 'Tin nhắn này đã được lên lịch rồi.'
+            : 'Không tìm thấy tin nhắn assistant hợp lệ để lên lịch.');
+        })
+        .catch((error) => {
+          if (active) {
+            setAvailableMessages([]);
+            setContentLoadError(getErrorMessage(error));
+          }
+        });
+      return () => { active = false; };
+    }, [contentMessageId, id, user?.access_token])
+  );
+
+  const selectedContent = useMemo(
+    () => availableMessages?.find((message) => String(message.id) === String(selectedContentId)) ?? null,
+    [availableMessages, selectedContentId]
+  );
+
+  const togglePlatform = (platform) => {
+    setPlatformError('');
+    setPlatforms((current) =>
+      current.includes(platform) ? current.filter((item) => item !== platform) : [...current, platform]
+    );
+  };
+
+  const changeMonth = (delta) => {
+    setView(({ year, month }) => {
+      const next = new Date(year, month + delta, 1);
+      return { year: next.getFullYear(), month: next.getMonth() };
+    });
+  };
+
+  const openTimePicker = () => {
+    if (!selectedContent) {
+      setContentError('Vui lòng chọn nội dung assistant đã tạo trước khi đặt lịch.');
+      return;
+    }
+    if (platforms.length === 0) {
+      setPlatformError('Vui lòng chọn ít nhất một nền tảng');
+      return;
+    }
+    setTimeError('');
+    setPickingTime(true);
+  };
+
+  const selectDay = (key) => {
+    setSelectedKey(key);
+    openTimePicker();
+  };
+
+  const handleSheetClosed = useCallback(() => {
+    if (saved.current) router.back();
+  }, []);
+
+  const selectedDate = selectedKey ? selectedKey.split('-').reverse().join('/') : '';
+
+  const handleSave = async () => {
+    if (!selectedContent) {
+      setContentError('Vui lòng chọn nội dung cần gắn lịch.');
+      setPickingTime(false);
+      return;
+    }
+    const time = `${selectedDate} ${pad(hour)}:${pad(minute)}`;
+    const invalid = validateScheduleTime(time);
+    setTimeError(invalid ?? '');
+    if (invalid) return;
+
+    setSaving(true);
+    try {
+      await createSchedule(user.access_token, {
+        projectId: id,
+        contentMessageId: selectedContent.id,
+        platforms,
+        scheduledAt: `${selectedKey}T${pad(hour)}:${pad(minute)}:00+07:00`,
+        timezone: TIMEZONE,
+      });
+      saved.current = true;
+      setPickingTime(false);
+    } catch (error) {
+      setTimeError(getErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
+      <PageHeader title="Đặt lịch" />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.page}>
+          <Text style={styles.sectionTitle}>Nội dung đã chọn</Text>
+          <View style={styles.contentPreview}>
+            {availableMessages === null ? (
+              <ActivityIndicator color={colors.text} />
+            ) : selectedContent ? (
+              <Text style={styles.contentPreviewText}>{getMessageLabel(selectedContent)}</Text>
+            ) : (
+              <Text style={styles.contentPreviewText}>Không tìm thấy nội dung đã chọn</Text>
+            )}
+          </View>
+          {contentLoadError ? <Text style={styles.error}>{contentLoadError}</Text> : null}
+          {contentError ? <Text style={styles.error}>{contentError}</Text> : null}
+          {selectedContent?.attachments?.length ? (
+            <View style={styles.selectedAttachments}>
+              <MessageAttachments attachments={selectedContent.attachments} />
+            </View>
+          ) : null}
+
+          <Text style={styles.sectionTitle}>Nền tảng muốn đăng</Text>
+          <View style={styles.platforms}>
+            {PLATFORMS.map((platform) => {
+              const checked = platforms.includes(platform);
+              return (
+                <Pressable
+                  key={platform}
+                  onPress={() => togglePlatform(platform)}
+                  style={({ pressed }) => [styles.platform, checked && styles.platformChecked, pressed && styles.pressed]}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={platform}
+                  accessibilityState={{ checked }}
+                >
+                  {checked ? <CheckIcon size={16} color={colors.onPrimary} /> : null}
+                  <Text style={[styles.platformLabel, checked && styles.platformLabelChecked]}>{platform}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {platformError ? <Text style={styles.error}>{platformError}</Text> : null}
+
+          <Text style={[styles.sectionTitle, styles.dateTitle]}>Ngày đăng</Text>
+          <MonthCalendar
+            year={view.year}
+            month={view.month}
+            selectedKey={selectedKey}
+            minKey={now.dayKey}
+            markedKeys={NO_MARKS}
+            onSelectDay={selectDay}
+            onChangeMonth={changeMonth}
+          />
+
+          {selectedKey ? (
+            <View style={styles.timeButton}>
+              <AuthButton title="Chọn giờ" onPress={openTimePicker} />
+            </View>
+          ) : null}
+        </View>
+      </ScrollView>
+
+      <TimePickerSheet
+        visible={pickingTime}
+        title={`Giờ đăng ngày ${selectedDate}`}
+        hour={hour}
+        minute={minute}
+        error={timeError}
+        saving={saving}
+        onChangeHour={setHour}
+        onChangeMinute={setMinute}
+        onSave={handleSave}
+        onClose={() => setPickingTime(false)}
+        onClosed={handleSheetClosed}
+      />
+    </SafeAreaView>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.backgroundDeep,
+  },
+  content: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 40,
+  },
+  page: {
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
+  },
+  sectionTitle: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  contentPreview: {
+    minHeight: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+  },
+  contentPreviewText: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 21,
+    alignSelf: 'stretch',
+  },
+  selectedAttachments: {
+    marginTop: 10,
+  },
+  dateTitle: {
+    marginTop: 24,
+    marginBottom: 4,
+  },
+  platforms: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  platform: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+  },
+  platformChecked: {
+    backgroundColor: colors.primary,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  platformLabel: {
+    color: colors.text,
+    fontSize: 15,
+  },
+  platformLabelChecked: {
+    color: colors.onPrimary,
+    fontWeight: '600',
+  },
+  error: {
+    color: colors.error,
+    fontSize: 14,
+    marginTop: 12,
+  },
+  timeButton: {
+    marginTop: 16,
+  },
+});
+===== src/components/AgentForm.js
+import { useEffect, use, useRef, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+
+import AuthButton from '@/components/AuthButton';
+import AuthField from '@/components/AuthField';
+import { LockIcon } from '@/components/AuthIcons';
+import { AgentIcon, PluginIcon } from '@/components/HomeIcons';
+import { MyUserContext } from '@/config/Contexts';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
+import {
+  createAgent,
+  getAgentErrorMessage,
+  testAgentConnection,
+  testSavedAgentConnection,
+  updateAgent,
+} from '@/services/agents';
+
+const MAX_NAME_LENGTH = 150;
+const MAX_DOMAIN_LENGTH = 255;
+const DOMAIN_FORMAT = /^https?:\/\/[^\s/]+\.?[^\s]*$/i;
+
+export default function AgentForm({ onSaved, agent = null, onCancel }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
+  const [user] = use(MyUserContext);
+  const isEditing = !!agent;
+
+  const [name, setName] = useState(agent?.name || '');
+  const [domain, setDomain] = useState(agent?.domain || '');
+  const [apiKey, setApiKey] = useState('');
+  const [agentKey, setAgentKey] = useState('');
+  const [errors, setErrors] = useState({});
+  const [formError, setFormError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState(null); // { ok: bool, message: str }
+
+  const domainRef = useRef(null);
+  const apiKeyRef = useRef(null);
+  const agentKeyRef = useRef(null);
+
+  useEffect(() => {
+    if (agent) {
+      setName(agent.name || '');
+      setDomain(agent.domain || '');
+      setApiKey('');
+      setAgentKey('');
+    } else {
+      setName('');
+      setDomain('');
+      setApiKey('');
+      setAgentKey('');
+    }
+    setErrors({});
+    setFormError('');
+    setConnectionStatus(null);
+  }, [agent]);
+
+  const busy = saving || testing;
+
+  const validate = (needName = true) => {
+    const trimmedDomain = domain.trim();
+    const nextErrors = {};
+
+    if (needName && !name.trim()) nextErrors.name = 'Vui lòng nhập Tên Agent';
+
+    if (!trimmedDomain) {
+      nextErrors.domain = 'Vui lòng nhập Domain GoClaw';
+    } else if (!DOMAIN_FORMAT.test(trimmedDomain)) {
+      nextErrors.domain = 'Domain phải bắt đầu bằng http:// hoặc https://';
+    }
+
+    // Khi tạo mới thì cần nhập key; khi sửa nếu bỏ trống thì giữ nguyên key cũ
+    if (!isEditing) {
+      if (!apiKey.trim()) nextErrors.apiKey = 'Vui lòng nhập API Key';
+    }
+
+    setErrors(nextErrors);
+    setFormError('');
+    setConnectionStatus(null);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const handleTest = async () => {
+    if (busy || !validate(false)) return;
+    setTesting(true);
+    setConnectionStatus(null);
+    setFormError('');
+
+    try {
+      let res;
+      // Nếu đang sửa và người dùng không nhập key mới, test bằng thông tin đã lưu
+      if (isEditing && !apiKey.trim() && !agentKey.trim() && domain.trim() === agent.domain) {
+        res = await testSavedAgentConnection(user.access_token, agent.id);
+      } else {
+        res = await testAgentConnection(user.access_token, {
+          domain: domain.trim(),
+          apiKey: apiKey.trim() || undefined,
+          agentKey: agentKey.trim() || undefined,
+        });
+      }
+
+      setConnectionStatus({
+        ok: res.ok,
+        message: res.ok ? 'Kết nối GoClaw thành công' : (res.message || 'Không kết nối được GoClaw'),
+      });
+    } catch (error) {
+      setConnectionStatus({
+        ok: false,
+        message: getAgentErrorMessage(error),
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (busy || !validate(true)) return;
+    setSaving(true);
+    setFormError('');
+
+    try {
+      if (isEditing) {
+        await updateAgent(user.access_token, agent.id, {
+          name: name.trim(),
+          domain: domain.trim(),
+          apiKey: apiKey.trim() || undefined,
+          agentKey: agentKey.trim() || undefined,
+        });
+      } else {
+        await createAgent(user.access_token, {
+          name: name.trim(),
+          domain: domain.trim(),
+          apiKey: apiKey.trim(),
+          agentKey: agentKey.trim(),
+        });
+      }
+      onSaved?.();
+    } catch (error) {
+      setFormError(getAgentErrorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editField = (setter) => (val) => {
+    setter(val);
+    setConnectionStatus(null);
+    setFormError('');
+  };
+
+  return (
+    <View style={styles.formCard}>
+      {isEditing && (
+        <View style={styles.editingHeader}>
+          <Text style={styles.editingTitle}>Chỉnh sửa Agent</Text>
+          <Text style={styles.editingSubtitle}>Cập nhật tên, domain hoặc thay đổi khóa bảo mật</Text>
+        </View>
+      )}
+
+      <AuthField
+        label="Tên Agent"
+        icon={<AgentIcon size={20} color={colors.textMuted} />}
+        error={errors.name}
+        value={name}
+        onChangeText={editField(setName)}
+        placeholder="VD: Trợ lý kịch bản, Video Editor"
+        maxLength={MAX_NAME_LENGTH}
+        returnKeyType="next"
+        onSubmitEditing={() => domainRef.current?.focus()}
+      />
+
+      <AuthField
+        ref={domainRef}
+        label="Domain Máy Chủ"
+        icon={<PluginIcon size={20} color={colors.textMuted} />}
+        error={errors.domain}
+        value={domain}
+        onChangeText={editField(setDomain)}
+        placeholder="https://goclaw.cua-ban.com"
+        maxLength={MAX_DOMAIN_LENGTH}
+        keyboardType="url"
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="next"
+        onSubmitEditing={() => apiKeyRef.current?.focus()}
+      />
+
+      <AuthField
+        ref={apiKeyRef}
+        label={isEditing ? 'API Key mới (bỏ trống nếu giữ nguyên)' : 'API Key'}
+        icon={<LockIcon />}
+        error={errors.apiKey}
+        value={apiKey}
+        onChangeText={editField(setApiKey)}
+        placeholder={isEditing && agent?.has_api_key ? `Đang dùng: ${agent.masked_api_key}` : '••••••••'}
+        secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="off"
+        returnKeyType="next"
+        onSubmitEditing={() => agentKeyRef.current?.focus()}
+      />
+
+      <AuthField
+        ref={agentKeyRef}
+        label={isEditing ? 'Agent Key mới (bỏ trống nếu giữ nguyên)' : 'Agent Key'}
+        icon={<LockIcon />}
+        error={errors.agentKey}
+        value={agentKey}
+        onChangeText={editField(setAgentKey)}
+        placeholder={isEditing && agent?.has_agent_key ? `Đang dùng: ${agent.masked_agent_key}` : '••••••••'}
+        secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="off"
+        returnKeyType="done"
+        onSubmitEditing={handleSave}
+      />
+
+      {formError ? <Text style={styles.formErrorText}>{formError}</Text> : null}
+
+      {/* Modern Status Pill (Không dùng icon tick to giả tạo) */}
+      {connectionStatus ? (
+        <View
+          style={[
+            styles.statusPill,
+            connectionStatus.ok ? styles.statusPillOk : styles.statusPillFail,
+          ]}
+        >
+          <View
+            style={[
+              styles.statusDot,
+              connectionStatus.ok ? styles.statusDotOk : styles.statusDotFail,
+            ]}
+          />
+          <Text
+            style={[
+              styles.statusText,
+              connectionStatus.ok ? styles.statusTextOk : styles.statusTextFail,
+            ]}
+          >
+            {connectionStatus.message}
+          </Text>
+        </View>
+      ) : null}
+
+      <View style={styles.actions}>
+        <AuthButton
+          title="Kiểm tra kết nối"
+          variant="secondary"
+          onPress={handleTest}
+          loading={testing}
+        />
+        <AuthButton
+          title={isEditing ? 'Lưu thay đổi' : 'Lưu Agent'}
+          onPress={handleSave}
+          loading={saving}
+        />
+        {onCancel ? (
+          <AuthButton
+            title="Hủy"
+            variant="secondary"
+            onPress={onCancel}
+            disabled={busy}
+          />
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  formCard: {
+    paddingVertical: 4,
+  },
+  editingHeader: {
+    marginBottom: 16,
+  },
+  editingTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  editingSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  actions: {
+    gap: 12,
+    marginTop: 8,
+  },
+  formErrorText: {
+    color: colors.error,
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  /* Modern Minimalist Status Pill */
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+  },
+  statusPillOk: {
+    backgroundColor: colors.successSoft,
+    borderColor: colors.successBorder,
+  },
+  statusPillFail: {
+    backgroundColor: colors.errorSoft,
+    borderColor: colors.errorBorder,
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  statusDotOk: {
+    backgroundColor: colors.success,
+  },
+  statusDotFail: {
+    backgroundColor: colors.error,
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  statusTextOk: {
+    color: colors.success,
+  },
+  statusTextFail: {
+    color: colors.error,
+  },
+});
+===== src/components/AuthButton.js
+import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
+
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
+
+export default function AuthButton({ title, onPress, loading = false, variant = 'primary' }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
+  const isPrimary = variant === 'primary';
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ busy: loading, disabled: loading }}
+      disabled={loading}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.button,
+        isPrimary ? styles.primary : styles.secondary,
+        pressed && styles.pressed,
+      ]}
+    >
+      {loading ? (
+        <ActivityIndicator color={isPrimary ? colors.onPrimary : colors.text} />
+      ) : (
+        <Text style={[styles.title, !isPrimary && styles.secondaryTitle]}>{title}</Text>
+      )}
+    </Pressable>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  button: {
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+  },
+  primary: {
+    backgroundColor: colors.primary,
+  },
+  secondary: {
+    backgroundColor: colors.surface,
+  },
+  pressed: {
+    opacity: 0.8,
+  },
+  title: {
+    color: colors.onPrimary,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  secondaryTitle: {
+    color: colors.text,
+  },
+});===== src/components/AuthField.js
+import { StyleSheet, Text, TextInput, View } from 'react-native';
+
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
+
+export default function AuthField({ label, icon, error, ref, ...inputProps }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <View style={[styles.inputRow, error && styles.inputRowError]}>
+        {icon}
+        <TextInput
+          ref={ref}
+          style={styles.input}
+          placeholderTextColor={colors.textMuted}
+          selectionColor={colors.primary}
+          accessibilityLabel={label}
+          {...inputProps}
+        />
+      </View>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+    </View>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  field: {
+    marginBottom: 24,
+  },
+  label: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  inputRow: {
+    height: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.surface,
+    backgroundColor: colors.surface,
+  },
+  inputRowError: {
+    borderColor: colors.error,
+  },
+  input: {
+    flex: 1,
+    height: '100%',
+    color: colors.text,
+    fontSize: 16,
+  },
+  error: {
+    color: colors.error,
+    fontSize: 13,
+    marginTop: 6,
+  },
+});
+===== src/components/AuthIcons.js
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
+
+import { useThemeColors } from '@/constants/theme';
+
+export const Icon = ({ children, color, size = 20 }) => {
+  const colors = useThemeColors();
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color ?? colors.textMuted}
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {children}
+    </Svg>
+  );
+};
+
+export const PhoneIcon = (props) => (
+  <Icon {...props}>
+    <Path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384" />
+  </Icon>
+);
+
+export const LockIcon = () => (
+  <Icon>
+    <Rect x={3} y={11} width={18} height={11} rx={2} ry={2} />
+    <Path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </Icon>
+);
+
+export const UserIcon = () => (
+  <Icon>
+    <Path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+    <Circle cx={12} cy={7} r={4} />
+  </Icon>
+);
+===== src/components/AuthScreen.js
+import { StatusBar } from 'expo-status-bar';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
+
+export default function AuthScreen({ title, subtitle, footer, children }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.header}>
+            <View style={styles.logo}>
+              <Text style={styles.logoText}>N</Text>
+            </View>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.subtitle}>{subtitle}</Text>
+          </View>
+          <View style={styles.form}>{children}</View>
+          <View style={styles.footer}>{footer}</View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  flex: {
+    flex: 1,
+  },
+  content: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 48,
+    paddingBottom: 16,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  logo: {
+    width: 72,
+    height: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    backgroundColor: colors.primary,
+    marginBottom: 12,
+  },
+  logoText: {
+    color: colors.onPrimary,
+    fontSize: 40,
+    fontWeight: '700',
+  },
+  title: {
+    color: colors.text,
+    fontSize: 28,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  subtitle: {
+    color: colors.textSecondary,
+    fontSize: 16,
+    lineHeight: 22,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  form: {
+    flexGrow: 1,
+  },
+  footer: {
+    alignItems: 'center',
+    paddingTop: 24,
+  },
+});===== src/components/ChatAttachments.js
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { useState } from 'react';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { CloseIcon, PlayIcon } from '@/components/HomeIcons';
+import { useThemeStyles } from '@/constants/theme';
+import { isImage, isVideo } from '@/services/attachments';
+
+const VideoModal = ({ url, onClose }) => {
+  const styles = useThemeStyles(createStyles);
+
+  const insets = useSafeAreaInsets();
+  const player = useVideoPlayer(url, (videoPlayer) => videoPlayer.play());
+
+  return (
+    <Modal visible animationType="fade" onRequestClose={onClose}>
+      <View style={[styles.videoPage, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
+        <Pressable
+          onPress={onClose}
+          style={({ pressed }) => [styles.videoClose, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Đóng video"
+        >
+          <CloseIcon />
+        </Pressable>
+        <VideoView style={styles.video} player={player} nativeControls contentFit="contain" />
+      </View>
+    </Modal>
+  );
+};
+
+const VideoTile = ({ style, size = 28 }) => {
+  const styles = useThemeStyles(createStyles);
+  return (
+    <View style={[styles.videoTile, style]}>
+      <PlayIcon size={size} />
+    </View>
+  );
+};
+
+export const MessageAttachments = ({ attachments, align = 'flex-start' }) => {
+  const styles = useThemeStyles(createStyles);
+
+  const [playingUrl, setPlayingUrl] = useState(null);
+
+  return (
+    <View style={[styles.list, { alignItems: align }]}>
+      {attachments.map((file) => {
+        if (isImage(file.mime_type) && file.url) {
+          return (
+            <Image
+              key={file.id}
+              source={{ uri: file.url }}
+              style={styles.media}
+              accessibilityLabel={file.file_name}
+            />
+          );
+        }
+        if (isVideo(file.mime_type) && file.url) {
+          return (
+            <Pressable
+              key={file.id}
+              onPress={() => setPlayingUrl(file.url)}
+              style={({ pressed }) => pressed && styles.pressed}
+              accessibilityRole="button"
+              accessibilityLabel={`Xem video ${file.file_name}`}
+            >
+              <VideoTile style={styles.media} />
+            </Pressable>
+          );
+        }
+        return (
+          <View key={file.id} style={styles.fileRow}>
+            <Text style={styles.fileName} numberOfLines={1}>{file.file_name}</Text>
+          </View>
+        );
+      })}
+      {playingUrl ? <VideoModal url={playingUrl} onClose={() => setPlayingUrl(null)} /> : null}
+    </View>
+  );
+};
+
+export const PendingAttachments = ({ files, onRemove }) => {
+  const styles = useThemeStyles(createStyles);
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.pending}
+      keyboardShouldPersistTaps="handled"
+    >
+      {files.map((file) => (
+        <View key={file.uri} style={styles.thumb}>
+          {isVideo(file.mimeType) ? (
+            <VideoTile style={styles.thumbMedia} size={22} />
+          ) : (
+            <Image source={{ uri: file.uri }} style={styles.thumbMedia} accessibilityLabel={file.fileName} />
+          )}
+          <Pressable
+            onPress={() => onRemove(file.uri)}
+            hitSlop={10}
+            style={({ pressed }) => [styles.remove, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={`Bỏ ${file.fileName}`}
+          >
+            <CloseIcon size={14} />
+          </Pressable>
+        </View>
+      ))}
+    </ScrollView>
+  );
+};
+
+const createStyles = (colors) => StyleSheet.create({
+  pressed: {
+    opacity: 0.7,
+  },
+  list: {
+    gap: 8,
+  },
+  media: {
+    width: 220,
+    height: 220,
+    borderRadius: 16,
+    backgroundColor: colors.surface,
+  },
+  videoTile: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  fileRow: {
+    maxWidth: 260,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+  },
+  fileName: {
+    color: colors.text,
+    fontSize: 14,
+  },
+  pending: {
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
+  thumb: {
+    width: 68,
+    height: 68,
+  },
+  thumbMedia: {
+    width: 64,
+    height: 64,
+    marginTop: 4,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+  },
+  remove: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 11,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.divider,
+    backgroundColor: colors.background,
+  },
+  videoPage: {
+    flex: 1,
+    backgroundColor: colors.backgroundDeep,
+  },
+  videoClose: {
+    alignSelf: 'flex-end',
+    width: 44,
+    height: 44,
+    marginRight: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+  },
+  video: {
+    flex: 1,
+  },
+});
+===== src/components/DrawerScreen.js
+import { router, useLocalSearchParams, usePathname } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { Keyboard } from 'react-native';
+
+import MenuButton from '@/components/MenuButton';
+import PushDrawer from '@/components/PushDrawer';
+import Sidebar from '@/components/Sidebar';
+
+const CLOSE_AFTER_PAGE_OPENS = 300;
+
+// Khung chung của các trang mở từ Sidebar: bấm một mục thì Sidebar khép lại và nội dung trang đó trượt vào.
+// root: Trang chủ giữ lại trong stack, các trang khác thay thế nhau để stack không dài thêm.
+export default function DrawerScreen({ root = false, children }) {
+  const { fromDrawer } = useLocalSearchParams();
+  const pathname = usePathname();
+  const [open, setOpen] = useState(fromDrawer === '1');
+  const close = useCallback(() => setOpen(false), []);
+
+  // Mở từ Sidebar: bắt đầu ở tư thế Sidebar đang mở rồi khép lại
+  useEffect(() => {
+    if (!open) return undefined;
+    const frame = requestAnimationFrame(close);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const openMenu = () => {
+    Keyboard.dismiss();
+    setOpen(true);
+  };
+
+  const navigate = (href) => {
+    if (href === pathname) {
+      close();
+      return;
+    }
+    const target = { pathname: href, params: { fromDrawer: '1' } };
+    if (root) {
+      router.push(target);
+      // Khép khi trang mới đã che Trang chủ, để lúc quay về Sidebar ở đây không còn mở
+      setTimeout(close, CLOSE_AFTER_PAGE_OPENS);
+    } else {
+      router.replace(target);
+    }
+  };
+
+  return (
+    <PushDrawer
+      open={open}
+      onClose={close}
+      drawer={<Sidebar onClose={close} onNavigate={navigate} />}
+    >
+      {children(<MenuButton expanded={open} onPress={openMenu} />)}
+    </PushDrawer>
+  );
+}
+===== src/components/HomeIcons.js
+import { Circle, Path, Rect } from 'react-native-svg';
+
+import { Icon } from '@/components/AuthIcons';
+import { useThemeColors } from '@/constants/theme';
+
+const createIcon = (shapes) => {
+  const HomeIcon = ({ color, size = 24 }) => {
+  const colors = useThemeColors();
+    return <Icon color={color ?? colors.text} size={size}>{shapes}</Icon>;
+  };
+  return HomeIcon;
+};
+
+export const MenuIcon = createIcon(<Path d="M4 6h16M4 12h16M4 18h16" />);
+
+export const CloseIcon = createIcon(<Path d="M18 6 6 18M6 6l12 12" />);
+
+export const BackIcon = createIcon(<Path d="m15 18-6-6 6-6" />);
+
+export const SendIcon = createIcon(<Path d="M12 19V5M5 12l7-7 7 7" />);
+
+export const PlusIcon = createIcon(<Path d="M5 12h14M12 5v14" />);
+
+export const MicIcon = createIcon(
+  <>
+    <Rect x={9} y={3} width={6} height={12} rx={3} />
+    <Path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
+  </>
+);
+
+export const StopIcon = createIcon(<Rect x={6} y={6} width={12} height={12} rx={2} />);
+
+export const PlayIcon = createIcon(
+  <Path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+);
+
+export const CheckIcon = createIcon(<Path d="M20 6 9 17l-5-5" />);
+
+export const CalendarIcon = createIcon(
+  <>
+    <Rect x={3} y={4} width={18} height={18} rx={2} />
+    <Path d="M16 2v4M8 2v4M3 10h18" />
+  </>
+);
+
+export const FolderIcon = createIcon(
+  <Path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+);
+
+export const ClockIcon = createIcon(
+  <>
+    <Circle cx={12} cy={12} r={10} />
+    <Path d="M12 6v6l4 2" />
+  </>
+);
+
+export const AgentIcon = createIcon(
+  <>
+    <Path d="M12 8V4H8" />
+    <Path d="M6 8h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z" />
+    <Path d="M2 14h2M20 14h2M15 13v2M9 13v2" />
+  </>
+);
+
+export const MoreIcon = createIcon(
+  <>
+    <Circle cx={5} cy={12} r={1} />
+    <Circle cx={12} cy={12} r={1} />
+    <Circle cx={19} cy={12} r={1} />
+  </>
+);
+
+export const ChatIcon = createIcon(<Path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />);
+
+export const EditIcon = createIcon(
+  <>
+    <Path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <Path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z" />
+  </>
+);
+
+export const SettingsIcon = createIcon(
+  <>
+    <Path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+    <Circle cx={12} cy={12} r={3} />
+  </>
+);
+
+export const ProfileIcon = createIcon(
+  <>
+    <Circle cx={12} cy={8} r={4} />
+    <Path d="M5 21a7 7 0 0 1 14 0" />
+  </>
+);
+
+export const LogoutIcon = createIcon(
+  <>
+    <Path d="M10 17l5-5-5-5M15 12H3" />
+    <Path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" />
+  </>
+);
+
+export const PencilIcon = createIcon(
+  <>
+    <Path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+    <Path d="m15 5 4 4" />
+  </>
+);
+
+export const ChevronRightIcon = createIcon(<Path d="m9 18 6-6-6-6" />);
+
+export const SmileIcon = createIcon(
+  <>
+    <Circle cx={12} cy={12} r={10} />
+    <Path d="M8 14s1.5 2 4 2 4-2 4-2" />
+    <Path d="M9 9h.01M15 9h.01" />
+  </>
+);
+
+export const BookIcon = createIcon(
+  <>
+    <Path d="M12 7v14" />
+    <Path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" />
+  </>
+);
+
+export const PluginIcon = createIcon(
+  <>
+    <Circle cx={12} cy={12} r={4} />
+    <Path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
+  </>
+);
+
+export const MailIcon = createIcon(
+  <>
+    <Path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" />
+    <Rect x={2} y={4} width={20} height={16} rx={2} />
+  </>
+);
+
+export const PlanIcon = createIcon(
+  <>
+    <Rect x={3} y={3} width={18} height={18} rx={2} />
+    <Path d="M8 12h8M12 8v8" />
+  </>
+);
+
+export const RestoreIcon = createIcon(
+  <>
+    <Path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+    <Path d="M3 3v5h5" />
+  </>
+);
+
+export const TrashIcon = createIcon(
+  <>
+    <Path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    <Path d="M10 11v6M14 11v6" />
+  </>
+);
+===== src/components/MenuButton.js
+import { Pressable, StyleSheet } from 'react-native';
+
+import { MenuIcon } from '@/components/HomeIcons';
+import { useThemeStyles } from '@/constants/theme';
+
+export default function MenuButton({ expanded, onPress }) {
+  const styles = useThemeStyles(createStyles);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={2}
+      style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel="Mở menu"
+      aria-expanded={expanded}
+    >
+      <MenuIcon size={22} />
+    </Pressable>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  button: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.divider,
+    backgroundColor: colors.surface,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+});
+===== src/components/MonthCalendar.js
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { BackIcon, ChevronRightIcon } from '@/components/HomeIcons';
+import { useThemeStyles } from '@/constants/theme';
+
+const WEEKDAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+
+const pad = (value) => String(value).padStart(2, '0');
+
+export const toDayKey = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+
+const buildCells = (year, month) => {
+  const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7; // Tuần bắt đầu từ thứ Hai
+  const dayCount = new Date(year, month + 1, 0).getDate();
+  const cells = Array.from({ length: firstWeekday }, () => null);
+  for (let day = 1; day <= dayCount; day += 1) cells.push(day);
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
+};
+
+export default function MonthCalendar({ year, month, selectedKey, minKey, markedKeys, onSelectDay, onChangeMonth }) {
+  const styles = useThemeStyles(createStyles);
+
+  const todayKey = toDayKey(new Date());
+  const cells = buildCells(year, month);
+
+  return (
+    <View>
+      <View style={styles.monthRow}>
+        <Pressable
+          onPress={() => onChangeMonth(-1)}
+          style={({ pressed }) => [styles.monthButton, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Tháng trước"
+        >
+          <BackIcon size={22} />
+        </Pressable>
+        <Text style={styles.monthTitle}>Tháng {month + 1}, {year}</Text>
+        <Pressable
+          onPress={() => onChangeMonth(1)}
+          style={({ pressed }) => [styles.monthButton, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Tháng sau"
+        >
+          <ChevronRightIcon size={22} />
+        </Pressable>
+      </View>
+
+      <View style={styles.grid}>
+        {WEEKDAYS.map((weekday) => (
+          <View key={weekday} style={styles.cell}>
+            <Text style={styles.weekday}>{weekday}</Text>
+          </View>
+        ))}
+        {cells.map((day, index) => {
+          if (day === null) return <View key={`empty-${index}`} style={styles.cell} />;
+          const key = `${year}-${pad(month + 1)}-${pad(day)}`;
+          const selected = key === selectedKey;
+          const marked = markedKeys.has(key);
+          const disabled = Boolean(minKey) && key < minKey;
+          return (
+            <Pressable
+              key={key}
+              onPress={() => onSelectDay(key)}
+              disabled={disabled}
+              style={styles.cell}
+              accessibilityRole="button"
+              accessibilityLabel={`Ngày ${day} tháng ${month + 1}${marked ? ', có lịch' : ''}`}
+              accessibilityState={{ disabled }}
+              aria-selected={selected}
+            >
+              <View style={[styles.day, key === todayKey && styles.today, selected && styles.daySelected, disabled && styles.dayDisabled]}>
+                <Text style={[styles.dayText, selected && styles.dayTextSelected]}>{day}</Text>
+                {marked ? <View style={[styles.dot, selected && styles.dotSelected]} /> : null}
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  monthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  monthButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  monthTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  cell: {
+    width: `${100 / 7}%`,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  weekday: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  day: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  today: {
+    borderColor: colors.divider,
+  },
+  daySelected: {
+    backgroundColor: colors.primary,
+  },
+  dayDisabled: {
+    opacity: 0.3,
+  },
+  dayText: {
+    color: colors.text,
+    fontSize: 16,
+  },
+  dayTextSelected: {
+    color: colors.onPrimary,
+    fontWeight: '600',
+  },
+  dot: {
+    position: 'absolute',
+    bottom: 4,
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: colors.accent,
+  },
+  dotSelected: {
+    backgroundColor: colors.onPrimary,
+  },
+});
+===== src/components/PageHeader.js
+import { router } from 'expo-router';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { BackIcon } from '@/components/HomeIcons';
+import { useThemeStyles } from '@/constants/theme';
+import useTopBarSpace from '@/hooks/useTopBarSpace';
+
+const goBack = () => {
+  if (router.canGoBack()) router.back();
+  else router.replace('/');
+};
+
+export default function PageHeader({ title, left }) {
+  const styles = useThemeStyles(createStyles);
+
+  const topBarSpace = useTopBarSpace();
+
+  return (
+    <View style={[styles.header, { paddingTop: topBarSpace }]}>
+      {left ?? (
+        <Pressable
+          onPress={goBack}
+          hitSlop={2}
+          style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Quay lại"
+        >
+          <BackIcon size={22} />
+        </Pressable>
+      )}
+      <Text style={styles.title} numberOfLines={1}>{title}</Text>
+      <View style={styles.spacer} />
+    </View>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 4,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.divider,
+    backgroundColor: colors.surface,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  title: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  spacer: {
+    width: 44,
+  },
+});
+===== src/components/PushDrawer.js
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  BackHandler,
+  Easing,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+
+import { useThemeStyles } from '@/constants/theme';
+import useReducedMotion from '@/hooks/useReducedMotion';
+
+const OPEN_DURATION = 280;
+const CLOSE_DURATION = 200;
+const MAX_WIDTH = 320;
+const WIDTH_RATIO = 0.76;
+const CONTENT_RADIUS = 36;
+
+export default function PushDrawer({ open, onClose, drawer, children }) {
+  const styles = useThemeStyles(createStyles);
+
+  const { width } = useWindowDimensions();
+  const drawerWidth = Math.min(width * WIDTH_RATIO, MAX_WIDTH);
+  const reducedMotion = useReducedMotion();
+  const progress = useRef(new Animated.Value(open ? 1 : 0)).current;
+  const [mounted, setMounted] = useState(open);
+
+  if (open && !mounted) setMounted(true);
+
+  useEffect(() => {
+    const duration = open ? OPEN_DURATION : CLOSE_DURATION;
+    Animated.timing(progress, {
+      toValue: open ? 1 : 0,
+      duration: reducedMotion ? 0 : duration,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished && !open) setMounted(false);
+    });
+  }, [open, progress, reducedMotion]);
+
+  // Chỉ bắt nút Back khi màn hình này đang hiển thị, để Back ở trang Tài khoản vẫn đóng đúng trang đó
+  useFocusEffect(
+    useCallback(() => {
+      if (!open) return undefined;
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        onClose();
+        return true;
+      });
+      return () => subscription.remove();
+    }, [open, onClose])
+  );
+
+  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [0, drawerWidth] });
+
+  return (
+    <View style={styles.root}>
+      {mounted ? (
+        <View style={styles.drawerLayer}>
+          <View style={[styles.drawer, { width: drawerWidth }]}>{drawer}</View>
+        </View>
+      ) : null}
+
+      <Animated.View style={[styles.content, { transform: [{ translateX }] }]}>
+        <View
+          style={styles.contentInner}
+          accessibilityElementsHidden={open}
+          importantForAccessibility={open ? 'no-hide-descendants' : 'auto'}
+        >
+          {children}
+        </View>
+        {mounted ? (
+          <Animated.View style={[styles.dim, { opacity: progress }]} pointerEvents="none" />
+        ) : null}
+        {open ? (
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={onClose}
+            accessibilityRole="button"
+            accessibilityLabel="Đóng menu"
+          />
+        ) : null}
+      </Animated.View>
+    </View>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  root: {
+    flex: 1,
+    overflow: 'hidden',
+    backgroundColor: colors.background,
+  },
+  drawerLayer: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: colors.backgroundDeep,
+  },
+  drawer: {
+    flex: 1,
+  },
+  content: {
+    flex: 1,
+    overflow: 'hidden',
+    backgroundColor: colors.background,
+    borderTopLeftRadius: CONTENT_RADIUS,
+    borderBottomLeftRadius: CONTENT_RADIUS,
+  },
+  contentInner: {
+    flex: 1,
+  },
+  dim: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: colors.overlay,
+  },
+});
+===== src/components/Sidebar.js
+import { router, useFocusEffect } from 'expo-router';
+import { use, useCallback, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+
+import {
+  AgentIcon,
+  ChatIcon,
+  ChevronRightIcon,
+  ClockIcon,
+  MoreIcon,
+  PencilIcon,
+  ProfileIcon,
+  LogoutIcon,
+  SettingsIcon,
+} from '@/components/HomeIcons';
+import { MyUserContext } from '@/config/Contexts';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
+import { getProjects, getRecentProjectIds } from '@/services/projects';
+
+const FOOTER_HEIGHT = 58;
+const FOOTER_GAP = 12;
+const FADE_HEIGHT = 96;
+const UNTITLED = 'Cuộc trò chuyện chưa đặt tên';
+
+// Giữ danh sách lần tải trước để Sidebar của màn hình mới hiện ngay, không bị trống rồi mới hiện lại
+let cache = { token: null, projects: [], recentIds: [] };
+
+// Không có href: chỉ đóng Sidebar
+const NAV_ITEMS = [
+  { key: 'projects', label: 'Cuộc trò chuyện mới', Icon: PencilIcon, href: '/projects/new' },
+  { key: 'scheduled', label: 'Đã lên lịch', Icon: ClockIcon, href: '/scheduled' },
+  { key: 'agents', label: 'Agent', Icon: AgentIcon, href: '/agents' },
+  { key: 'more', label: 'Thêm', Icon: MoreIcon },
+];
+
+const Row = ({ label, Icon, onPress }) => {
+  const styles = useThemeStyles(createStyles);
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      {Icon ? <Icon /> : null}
+      <Text style={styles.rowLabel} numberOfLines={1}>{label}</Text>
+    </Pressable>
+  );
+};
+
+export default function Sidebar({ onClose, onNavigate }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
+  const [user, dispatch] = use(MyUserContext);
+  const insets = useSafeAreaInsets();
+  const token = user?.access_token;
+  const cached = cache.token === token ? cache : { projects: [], recentIds: [] };
+  const [projects, setProjects] = useState(cached.projects);
+  const [recentIds, setRecentIds] = useState(cached.recentIds);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return undefined;
+      let active = true;
+      Promise.all([getProjects(token), getRecentProjectIds(token)])
+        .then(([projectItems, ids]) => {
+          cache = { token, projects: projectItems, recentIds: ids };
+          if (!active) return;
+          setProjects(projectItems);
+          setRecentIds(ids);
+        })
+        .catch(() => {});
+      return () => {
+        active = false;
+      };
+    }, [token])
+  );
+
+  const pinned = projects.filter((item) => item.pinned_at);
+  // Thứ tự theo lần mở gần nhất; dự án đã xóa hoặc lưu trữ thì không hiện
+  const recents = recentIds.map((id) => projects.find((item) => item.id === id)).filter(Boolean);
+  const footerSpace = insets.bottom + FOOTER_GAP;
+
+  const openPage = (href) => {
+    setAccountMenuOpen(false);
+    if (href) onNavigate(href);
+    else onClose();
+  };
+
+  const logout = () => {
+    setAccountMenuOpen(false);
+    dispatch({ type: 'LOGOUT' });
+    router.replace('/login');
+  };
+  const initials = (user?.full_name || 'U').trim().split(/\s+/).map((part) => part[0]).slice(-2).join('').toUpperCase();
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top', 'left']}>
+      <View style={styles.header}>
+        <Text style={styles.logo} accessibilityRole="header">AI EDIT</Text>
+      </View>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{ paddingBottom: footerSpace + FOOTER_HEIGHT + FOOTER_GAP }}
+        showsVerticalScrollIndicator={false}
+      >
+        {NAV_ITEMS.map(({ key, label, Icon, href }) => (
+          <Row key={key} label={label} Icon={Icon} onPress={() => openPage(href)} />
+        ))}
+
+        {pinned.length > 0 ? <Text style={styles.sectionTitle}>Đã ghim</Text> : null}
+        {pinned.map((item) => (
+          <Row
+            key={item.id}
+            label={item.title || UNTITLED}
+            Icon={ChatIcon}
+            onPress={() => onNavigate(`/projects/${item.id}`)}
+          />
+        ))}
+
+        {recents.length > 0 ? <Text style={styles.sectionTitle}>Gần đây</Text> : null}
+        {recents.map((item) => (
+          <Row key={item.id} label={item.title || UNTITLED} onPress={() => onNavigate(`/projects/${item.id}`)} />
+        ))}
+      </ScrollView>
+
+      <Svg
+        style={styles.fade}
+        width="100%"
+        height={footerSpace + FADE_HEIGHT}
+        pointerEvents="none"
+      >
+        <Defs>
+          <LinearGradient id="sidebarFade" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={colors.backgroundDeep} stopOpacity="0" />
+            <Stop offset="0.7" stopColor={colors.backgroundDeep} stopOpacity="1" />
+          </LinearGradient>
+        </Defs>
+        <Rect width="100%" height="100%" fill="url(#sidebarFade)" />
+      </Svg>
+
+      {accountMenuOpen ? (
+        <>
+          <Pressable
+            style={styles.menuBackdrop}
+            onPress={() => setAccountMenuOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Đóng menu tài khoản"
+          />
+          <View style={[styles.accountMenu, { bottom: footerSpace + FOOTER_HEIGHT + 8 }]}>
+            <Pressable
+              onPress={() => openPage('/profile')}
+              style={({ pressed }) => [styles.accountSummary, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Mở hồ sơ"
+            >
+              <View style={styles.avatar}><Text style={styles.avatarText}>{initials}</Text></View>
+              <View style={styles.accountCopy}>
+                <Text style={styles.accountName} numberOfLines={1}>{user?.full_name || 'Tài khoản'}</Text>
+                <Text style={styles.accountPlan}>Free</Text>
+              </View>
+              <ChevronRightIcon size={18} color={colors.textSecondary} />
+            </Pressable>
+            <View style={styles.menuDivider} />
+            <Row label="Hồ sơ" Icon={ProfileIcon} onPress={() => openPage('/profile')} />
+            <Row label="Cài đặt" Icon={SettingsIcon} onPress={() => openPage('/settings')} />
+            <View style={styles.menuDivider} />
+            <Row label="Đăng xuất" Icon={LogoutIcon} onPress={logout} />
+          </View>
+        </>
+      ) : null}
+
+      <View style={[styles.footer, { bottom: footerSpace }]}>
+        <Pressable
+          onPress={() => setAccountMenuOpen((open) => !open)}
+          style={({ pressed }) => [styles.accountButton, accountMenuOpen && styles.accountButtonOpen, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Tài khoản"
+          accessibilityState={{ expanded: accountMenuOpen }}
+        >
+          <View style={styles.avatar}><Text style={styles.avatarText}>{initials}</Text></View>
+          <View style={styles.accountCopy}>
+            <Text style={styles.accountName} numberOfLines={1}>{user?.full_name || 'Tài khoản'}</Text>
+            <Text style={styles.accountPlan}>Free</Text>
+          </View>
+        </Pressable>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.backgroundDeep,
+  },
+  header: {
+    height: 56,
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  logo: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  scroll: {
+    flex: 1,
+  },
+  row: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+  },
+  rowLabel: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 17,
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '600',
+    marginTop: 24,
+    marginBottom: 12,
+    paddingHorizontal: 24,
+  },
+  fade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  footer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  accountButton: {
+    minHeight: 58,
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+  },
+  accountButtonOpen: {
+    backgroundColor: colors.surfaceRaised,
+  },
+  avatar: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: colors.avatar,
+  },
+  avatarText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  accountCopy: {
+    flex: 1,
+  },
+  accountName: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  accountPlan: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginTop: 1,
+  },
+  menuBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2,
+  },
+  accountMenu: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    zIndex: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.divider,
+    backgroundColor: colors.backgroundDeep,
+    shadowColor: '#000000',
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 8,
+  },
+  accountSummary: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+  },
+  menuDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.divider,
+    marginVertical: 7,
+    marginHorizontal: 8,
+  },
+});
+===== src/components/TimePickerSheet.js
+import { useEffect, useState } from 'react';
+import { Animated, Easing, Modal, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import AuthButton from '@/components/AuthButton';
+import { CloseIcon } from '@/components/HomeIcons';
+import TimeWheel, { CENTER_ROW, ROW_HEIGHT } from '@/components/TimeWheel';
+import { useThemeStyles } from '@/constants/theme';
+import useReducedMotion from '@/hooks/useReducedMotion';
+
+const OPEN_DURATION = 280;
+const CLOSE_DURATION = 200;
+
+export default function TimePickerSheet({
+  visible,
+  title,
+  hour,
+  minute,
+  error,
+  saving,
+  onChangeHour,
+  onChangeMinute,
+  onSave,
+  onClose,
+  onClosed,
+}) {
+  const styles = useThemeStyles(createStyles);
+
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const reducedMotion = useReducedMotion();
+  const [progress] = useState(() => new Animated.Value(0));
+  const [mounted, setMounted] = useState(visible);
+  if (visible && !mounted) setMounted(true);
+
+  useEffect(() => {
+    const duration = visible ? OPEN_DURATION : CLOSE_DURATION;
+    Animated.timing(progress, {
+      toValue: visible ? 1 : 0,
+      duration: reducedMotion ? 0 : duration,
+      easing: visible ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (!finished || visible) return;
+      setMounted(false);
+      onClosed();
+    });
+  }, [visible, progress, reducedMotion, onClosed]);
+
+  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [height, 0] });
+
+  return (
+    <Modal visible={mounted} transparent animationType="none" statusBarTranslucent onRequestClose={onClose}>
+      <Animated.View style={[styles.dim, { opacity: progress }]}>
+        <Pressable style={styles.flex} onPress={onClose} accessibilityRole="button" accessibilityLabel="Đóng" />
+      </Animated.View>
+      <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + 16, transform: [{ translateY }] }]}>
+        <View style={styles.header}>
+          <Text style={styles.title} numberOfLines={1}>{title}</Text>
+          <Pressable
+            onPress={onClose}
+            style={({ pressed }) => [styles.close, pressed && styles.pressed]}
+            accessibilityRole="button"
+            accessibilityLabel="Đóng"
+          >
+            <CloseIcon size={22} />
+          </Pressable>
+        </View>
+
+        <View style={styles.wheels}>
+          <View style={styles.band} pointerEvents="none" />
+          <TimeWheel count={24} initialValue={hour} label="Giờ" onChange={onChangeHour} />
+          <TimeWheel count={60} initialValue={minute} label="Phút" onChange={onChangeMinute} />
+        </View>
+
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <AuthButton title="Lưu lịch" onPress={onSave} loading={saving} />
+      </Animated.View>
+    </Modal>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+  dim: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+  },
+  sheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    backgroundColor: colors.background,
+  },
+  header: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  title: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  close: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+    marginRight: -10,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  wheels: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 24,
+    marginBottom: 16,
+  },
+  band: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: CENTER_ROW * ROW_HEIGHT,
+    height: ROW_HEIGHT,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+  },
+  error: {
+    color: colors.error,
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+});
+===== src/components/TimeWheel.js
+import { memo, useCallback, useRef, useState } from 'react';
+import { Animated, StyleSheet, Text, View } from 'react-native';
+
+import { useThemeStyles } from '@/constants/theme';
+
+export const ROW_HEIGHT = 44;
+export const CENTER_ROW = 3;
+const VISIBLE_ROWS = CENTER_ROW * 2 + 1;
+export const WHEEL_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS;
+// Đủ dài để vuốt như vòng tròn 23 -> 00 -> 01, FlatList chỉ dựng các dòng đang thấy
+const TOTAL_ROWS = 2400;
+const START_ROW = TOTAL_ROWS / 2;
+const ROWS = Array.from({ length: TOTAL_ROWS }, (_, index) => index);
+
+// Các dòng nằm trên mặt trụ: càng xa dòng giữa càng nghiêng, mờ và dồn về giữa
+const DISTANCES = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
+const ROTATE_X = DISTANCES.map((distance) => `${distance * 20}deg`);
+const TRANSLATE_Y = [-52, -23, -7, -1, 0, 1, 7, 23, 52];
+const OPACITY = [0, 0.25, 0.42, 0.62, 1, 0.62, 0.42, 0.25, 0];
+
+const pad = (value) => String(value).padStart(2, '0');
+const keyExtractor = (row) => String(row);
+const getItemLayout = (_, index) => ({ length: ROW_HEIGHT, offset: ROW_HEIGHT * index, index });
+
+const WheelRow = memo(function WheelRow({ row, count, scrollY }) {
+  const styles = useThemeStyles(createStyles);
+
+  const center = (row - CENTER_ROW) * ROW_HEIGHT;
+  const inputRange = DISTANCES.map((distance) => center + distance * ROW_HEIGHT);
+  const animate = (outputRange) => scrollY.interpolate({ inputRange, outputRange, extrapolate: 'clamp' });
+
+  return (
+    <Animated.View
+      style={[
+        styles.row,
+        {
+          opacity: animate(OPACITY),
+          transform: [{ perspective: 600 }, { translateY: animate(TRANSLATE_Y) }, { rotateX: animate(ROTATE_X) }],
+        },
+      ]}
+    >
+      <Text style={styles.label}>{pad(row % count)}</Text>
+    </Animated.View>
+  );
+});
+
+// Giữ vị trí bánh xe ngoài state vì nó đổi theo từng khung hình khi vuốt. onChange phải là hàm ổn định
+const createWheel = ({ count, initialValue, onChange, setValue }) => {
+  const startTop = START_ROW + initialValue - CENTER_ROW;
+  const scrollY = new Animated.Value(startTop * ROW_HEIGHT);
+  let top = startTop;
+  let value = initialValue;
+
+  return {
+    scrollY,
+    startTop,
+    nextOffset: (delta) => (top + delta) * ROW_HEIGHT,
+    onScroll: Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
+      useNativeDriver: true,
+      listener: (event) => {
+        // Android có thể báo vị trí 0 lúc mới dựng, người dùng thì không vuốt tới được đầu danh sách
+        const offsetY = event.nativeEvent.contentOffset.y;
+        if (offsetY === 0) return;
+        top = Math.round(offsetY / ROW_HEIGHT);
+        const next = (top + CENTER_ROW) % count;
+        if (next === value) return;
+        value = next;
+        setValue(next);
+        onChange(next);
+      },
+    }),
+  };
+};
+
+export default function TimeWheel({ count, initialValue, label, onChange }) {
+  const styles = useThemeStyles(createStyles);
+
+  const listRef = useRef(null);
+  const [value, setValue] = useState(initialValue);
+  const [wheel] = useState(() => createWheel({ count, initialValue, onChange, setValue }));
+  const { scrollY } = wheel;
+
+  const renderItem = useCallback(
+    ({ item }) => <WheelRow row={item} count={count} scrollY={scrollY} />,
+    [count, scrollY]
+  );
+
+  const handleAccessibilityAction = ({ nativeEvent }) => {
+    const delta = nativeEvent.actionName === 'increment' ? 1 : -1;
+    listRef.current?.scrollToOffset({ offset: wheel.nextOffset(delta), animated: true });
+  };
+
+  return (
+    <View
+      style={styles.wheel}
+      accessible
+      accessibilityRole="adjustable"
+      accessibilityLabel={label}
+      accessibilityValue={{ text: pad(value) }}
+      accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
+      onAccessibilityAction={handleAccessibilityAction}
+    >
+      <Animated.FlatList
+        ref={listRef}
+        data={ROWS}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        getItemLayout={getItemLayout}
+        initialScrollIndex={wheel.startTop}
+        initialNumToRender={VISIBLE_ROWS + 2}
+        windowSize={11}
+        removeClippedSubviews={false}
+        snapToInterval={ROW_HEIGHT}
+        decelerationRate="fast"
+        bounces={false}
+        overScrollMode="never"
+        showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={wheel.onScroll}
+      />
+    </View>
+  );
+}
+
+const createStyles = (colors) => StyleSheet.create({
+  wheel: {
+    width: 96,
+    height: WHEEL_HEIGHT,
+    overflow: 'hidden',
+  },
+  row: {
+    height: ROW_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: {
+    color: colors.text,
+    fontSize: 30,
+    fontVariant: ['tabular-nums'],
+  },
+});
+===== src/hooks/useReducedMotion.js
+import { useEffect, useState } from 'react';
+import { AccessibilityInfo } from 'react-native';
+
+export default function useReducedMotion() {
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReducedMotion);
+    return () => subscription.remove();
+  }, []);
+
+  return reducedMotion;
+}
+===== src/hooks/useTopBarSpace.js
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+const MIN_DISTANCE_FROM_TOP = 16;
+const MIN_PADDING = 4;
+
+// Nút tròn trên cùng luôn cách mép trên ít nhất 16, bằng khoảng cách với mép bên, kể cả máy không có tai thỏ
+export default function useTopBarSpace() {
+  const { top } = useSafeAreaInsets();
+  return Math.max(MIN_PADDING, MIN_DISTANCE_FROM_TOP - top);
+}
+===== src/services/agents.js
+import { authApis, endpoints } from '@/config/Apis';
+
+export const getAgentErrorMessage = (error) => {
+  if (!error.response) return 'Không thể kết nối tới máy chủ. Vui lòng kiểm tra mạng hoặc backend.';
+  const { detail } = error.response.data ?? {};
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((d) => d.msg || d.message || JSON.stringify(d)).join('\n');
+  }
+  if (typeof detail === 'object' && detail !== null) {
+    return detail.message || JSON.stringify(detail);
+  }
+  if (error.response.status === 404) return 'Không tìm thấy Agent.';
+  if (error.response.status === 422) return 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.';
+  return 'Có lỗi xảy ra khi xử lý Agent. Vui lòng thử lại sau.';
+};
+
+/**
+ * Lấy danh sách rút gọn cho dropdown (chỉ id và name)
+ */
+export const getAgents = async (token) => {
+  const res = await authApis(token).get(endpoints.agents);
+  return res.data;
+};
+
+/**
+ * Lấy danh sách chi tiết Agent thuộc user_id (kèm domain, masked keys)
+ */
+export const getAgentsByUser = async (token, userId) => {
+  const endpoint = userId ? endpoints.agentsByUser(userId) : endpoints.agents;
+  const res = await authApis(token).get(endpoint);
+  return res.data;
+};
+
+/**
+ * Xem chi tiết 1 Agent
+ */
+export const getAgentDetail = async (token, agentId) => {
+  const res = await authApis(token).get(endpoints.agentDetail(agentId));
+  return res.data;
+};
+
+/**
+ * Tạo mới Agent
+ */
+export const createAgent = async (token, { name, domain, apiKey, agentKey }) => {
+  const res = await authApis(token).post(endpoints.agents, {
+    name: name?.trim(),
+    domain: domain?.trim(),
+    api_key: apiKey?.trim() || null,
+    agent_key: agentKey?.trim() || null,
+  });
+  return res.data;
+};
+
+/**
+ * Cập nhật Agent
+ */
+export const updateAgent = async (token, agentId, { name, domain, apiKey, agentKey }) => {
+  const payload = {};
+  if (name !== undefined) payload.name = name.trim();
+  if (domain !== undefined) payload.domain = domain.trim();
+  if (apiKey !== undefined && apiKey !== '') payload.api_key = apiKey.trim();
+  if (agentKey !== undefined && agentKey !== '') payload.agent_key = agentKey.trim();
+
+  const res = await authApis(token).put(endpoints.agentUpdate(agentId), payload);
+  return res.data;
+};
+
+/**
+ * Xóa Agent
+ */
+export const deleteAgent = async (token, agentId) => {
+  const res = await authApis(token).delete(endpoints.agentDelete(agentId));
+  return res.data;
+};
+
+/**
+ * Kiểm tra kết nối trực tiếp với domain và key tùy chọn
+ */
+export const testAgentConnection = async (token, { domain, apiKey, agentKey }) => {
+  const res = await authApis(token).post(endpoints.agentTestConnection, {
+    domain: domain?.trim(),
+    api_key: apiKey?.trim() || null,
+    agent_key: agentKey?.trim() || null,
+  });
+  return res.data;
+};
+
+/**
+ * Kiểm tra kết nối của Agent đã lưu
+ */
+export const testSavedAgentConnection = async (token, agentId) => {
+  const res = await authApis(token).post(endpoints.agentTestSaved(agentId));
+  return res.data;
+};
+===== src/services/appearance.js
+import { authApis, endpoints } from '@/config/Apis';
+
+const THEME_KEY = 'color_scheme';
+
+export const getThemePreference = async (token) => {
+  const res = await authApis(token).get(endpoints.me);
+  const theme = res.data.settings?.settings_json?.[THEME_KEY];
+  return theme === 'light' ? 'light' : 'dark';
+};
+
+export const saveThemePreference = async (token, theme) => {
+  const api = authApis(token);
+  const res = await api.get(endpoints.me);
+  const settings = res.data.settings?.settings_json ?? {};
+  await api.patch(endpoints.settings, {
+    settings_json: { ...settings, [THEME_KEY]: theme },
+  });
+};
+===== src/services/attachments.js
+import * as ImagePicker from 'expo-image-picker';
+
+// Cùng giới hạn với backend (app/services/attachment_service.py)
+export const MAX_FILES = 5;
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
+
+export const isImage = (mimeType) => mimeType?.startsWith('image/');
+export const isVideo = (mimeType) => mimeType?.startsWith('video/');
+
+const toFile = (asset, index) => {
+  const mimeType = asset.mimeType ?? (asset.type === 'video' ? 'video/mp4' : 'image/jpeg');
+  const extension = mimeType.split('/')[1];
+  return {
+    uri: asset.uri,
+    mimeType,
+    fileName: asset.fileName ?? `file-${Date.now()}-${index}.${extension}`,
+    fileSize: asset.fileSize,
+  };
+};
+
+export const pickMedia = async (remaining) => {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!permission.granted) {
+    return { files: [], error: 'Hãy cho phép app truy cập thư viện ảnh trong Cài đặt của điện thoại' };
+  }
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ['images', 'videos'],
+    allowsMultipleSelection: true,
+    selectionLimit: remaining,
+  });
+  if (result.canceled) return { files: [], error: '' };
+
+  const picked = result.assets.map(toFile);
+  const accepted = picked.filter((file) => !file.fileSize || file.fileSize <= MAX_FILE_BYTES);
+  const files = accepted.slice(0, remaining);
+  if (accepted.length < picked.length) {
+    return { files, error: 'Có file lớn hơn 50 MB nên chưa được thêm' };
+  }
+  if (files.length < accepted.length) {
+    return { files, error: `Mỗi tin gửi tối đa ${MAX_FILES} file` };
+  }
+  return { files, error: '' };
+};
+===== src/services/auth.js
+import Apis, { endpoints } from '@/config/Apis';
+
+// Cùng quy tắc với _VN_PHONE ở backend (app/schemas/mobile.py)
+const VN_PHONE = /^(?:\+?84|0)0?[35789][0-9]{8}$/;
+
+export const MIN_PASSWORD_LENGTH = 8;
+
+export const isValidPhone = (phone) => VN_PHONE.test(phone.replace(/[\s.\-()]/g, ''));
+
+const toSession = ({ user, access_token, refresh_token }) => ({ ...user, access_token, refresh_token });
+
+export const login = async (phone, password) => {
+  const res = await Apis.post(endpoints.login, { phone, password });
+  return toSession(res.data);
+};
+
+export const register = async (fullName, phone, password) => {
+  const res = await Apis.post(endpoints.register, { full_name: fullName, phone, password });
+  return toSession(res.data);
+};
+
+export const getErrorMessage = (error) => {
+  if (!error.response) return 'Không kết nối được máy chủ. Vui lòng thử lại.';
+  const { detail } = error.response.data ?? {};
+  if (typeof detail === 'string') return detail;
+  if (typeof detail?.message === 'string') return detail.message;
+  if (error.response.status === 422) return 'Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.';
+  return 'Có lỗi xảy ra. Vui lòng thử lại sau.';
+};===== src/services/projects.js
+import { authApis, endpoints } from '@/config/Apis';
+
+// Dự án chính là một cuộc trò chuyện (bảng conversations): có id riêng và lịch sử chat riêng
+const PAGE_SIZE = 100;
+const MESSAGE_PAGE_SIZE = 30;
+const MAX_RECENT = 20;
+const RECENT_KEY = 'recent_projects';
+
+export const getProjects = async (token) => {
+  const res = await authApis(token).get(endpoints.conversations, { params: { limit: PAGE_SIZE } });
+  return res.data;
+};
+
+export const getProject = async (token, id) => {
+  const res = await authApis(token).get(endpoints.conversation(id));
+  return res.data;
+};
+
+export const createProject = async (token, name, agentId) => {
+  const res = await authApis(token).post(endpoints.conversations, { title: name, agent_id: agentId });
+  return res.data;
+};
+
+export const getMessages = async (token, id, before) => {
+  const res = await authApis(token).get(endpoints.messages(id), {
+    params: { limit: MESSAGE_PAGE_SIZE, ...(before ? { before } : {}) },
+  });
+  return res.data;
+};
+
+export const sendMessage = async (token, id, content) => {
+  const res = await authApis(token).post(endpoints.messages(id), { content });
+  return res.data;
+};
+
+export const sendMessageWithFiles = async (token, id, content, files) => {
+  const form = new FormData();
+  files.forEach((file) => {
+    form.append('files', { uri: file.uri, name: file.fileName, type: file.mimeType });
+  });
+  if (content) form.append('content', content);
+  const res = await authApis(token).post(endpoints.messagesUpload(id), form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    transformRequest: (data) => data,
+  });
+  return res.data;
+};
+
+const getSettingsJson = async (token) => {
+  const res = await authApis(token).get(endpoints.me);
+  return res.data.settings?.settings_json ?? {};
+};
+
+// Lưu trong user_settings.settings_json nên còn nguyên khi tải lại trang hoặc đổi thiết bị
+export const getRecentProjectIds = async (token) => {
+  const settings = await getSettingsJson(token);
+  return (settings[RECENT_KEY] ?? []).map((item) => item.id);
+};
+
+export const markProjectOpened = async (token, id) => {
+  // PATCH /me/settings ghi đè cả settings_json nên phải giữ lại các khóa khác
+  const settings = await getSettingsJson(token);
+  const others = (settings[RECENT_KEY] ?? []).filter((item) => item.id !== id);
+  const recent = [{ id, opened_at: new Date().toISOString() }, ...others].slice(0, MAX_RECENT);
+  await authApis(token).patch(endpoints.settings, {
+    settings_json: { ...settings, [RECENT_KEY]: recent },
+  });
+};
+===== src/services/schedules.js
+import { authApis, endpoints } from '@/config/Apis';
+
+const PAGE_SIZE = 100;
+const MAX_PAGES = 5;
+// Backend mặc định hiểu giờ nhập theo Asia/Ho_Chi_Minh (UTC+7)
+const TIMEZONE_OFFSET_HOURS = 7;
+const INPUT_FORMAT = /^(\d{1,2})\/(\d{1,2})\/(\d{4}) (\d{1,2}):(\d{2})$/;
+
+// Đúng danh sách backend nhận (app/schemas/schedule.py)
+export const PLATFORMS = ['Facebook', 'YouTube', 'TikTok', 'Instagram', 'Website'];
+
+export const getSchedules = async (token) => {
+  const schedules = [];
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const res = await authApis(token).get(endpoints.schedules, {
+      params: { limit: PAGE_SIZE, offset: page * PAGE_SIZE },
+    });
+    schedules.push(...res.data);
+    if (res.data.length < PAGE_SIZE) break;
+  }
+  return schedules;
+};
+
+export const createSchedule = async (token, { projectId, contentMessageId, platforms, scheduledAt, timezone }) => {
+  const res = await authApis(token).post(endpoints.schedules, {
+    conversation_id: projectId,
+    content_message_id: contentMessageId,
+    platforms,
+    scheduled_at: scheduledAt,
+    timezone,
+  });
+  return res.data;
+};
+
+// Ngày giờ hiện tại theo múi giờ của lịch, không theo múi giờ của máy
+export const getScheduleNow = () => {
+  const now = new Date(Date.now() + TIMEZONE_OFFSET_HOURS * 3600000);
+  return {
+    year: now.getUTCFullYear(),
+    month: now.getUTCMonth(),
+    hour: now.getUTCHours(),
+    dayKey: now.toISOString().slice(0, 10),
+  };
+};
+
+export const validateScheduleTime = (text) => {
+  const match = INPUT_FORMAT.exec(text);
+  if (!match) return 'Nhập theo dạng 05/11/2026 20:00';
+  const [day, month, year, hour, minute] = match.slice(1).map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day, hour, minute));
+  const isRealDate =
+    date.getUTCDate() === day &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCHours() === hour &&
+    date.getUTCMinutes() === minute;
+  if (!isRealDate) return 'Ngày giờ không hợp lệ';
+  if (date.getTime() - TIMEZONE_OFFSET_HOURS * 3600000 <= Date.now()) return 'Thời gian phải ở tương lai';
+  return null;
+};
+
+// scheduled_at đã ở múi giờ của lịch, đọc thẳng từ chuỗi để không bị đổi theo múi giờ của máy
+export const getScheduleDayKey = (schedule) => schedule.scheduled_at.slice(0, 10);
+
+export const formatScheduleTime = (schedule) => {
+  const [date, time] = schedule.scheduled_at.split('T');
+  const [year, month, day] = date.split('-');
+  return `${day}/${month}/${year} ${time.slice(0, 5)}`;
+};
+===== src/config/Apis.js
+import axios from "axios";
+
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://192.168.1.3:4000";
+
+export const endpoints = {
+    'login': '/auth/login',
+    'register': '/auth/register',
+    'me': '/me',
+    'settings': '/me/settings',
+    'agents': '/agents',
+    'agentsByUser': (userId) => `/agents/${userId}`,
+    'agentDetail': (agentId) => `/agents/detail/${agentId}`,
+    'agentUpdate': (agentId) => `/agents/${agentId}`,
+    'agentDelete': (agentId) => `/agents/${agentId}`,
+    'agentTestConnection': '/agents/test-connection',
+    'agentTestSaved': (agentId) => `/agents/${agentId}/test`,
+    'conversations': '/conversations',
+    'conversation': (id) => `/conversations/${id}`,
+    'messages': (id) => `/conversations/${id}/messages`,
+    'messagesUpload': (id) => `/conversations/${id}/messages/upload`,
+    'schedules': '/schedules',
+};
+
+export const authApis = (token) => {
+    return axios.create({
+        baseURL: BASE_URL,
+        headers: {
+            'Authorization': `Bearer ${token}`
+        }
+    });
+};
+
+export default axios.create({
+    baseURL: BASE_URL
+});===== src/config/Contexts.js
+import { createContext } from "react";
+
+export const MyUserContext = createContext();===== src/reducers/reducers.js
+export const MyUserReducer = (current, action) => {
+    switch (action.type) {
+        case "LOGIN":
+            return action.payload;
+        case "LOGOUT":
+            return null;
+    }
+
+    return current;
+}

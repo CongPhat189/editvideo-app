@@ -6,11 +6,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import DrawerScreen from '@/components/DrawerScreen';
 import { MessageAttachments } from '@/components/ChatAttachments';
-import { ChevronRightIcon } from '@/components/HomeIcons';
+import { ChevronRightIcon, ClockIcon } from '@/components/HomeIcons';
+import { Eyebrow } from '@/components/Luxe';
+import { Breathing, FadeIn, stagger } from '@/components/Motion';
 import MonthCalendar, { toDayKey } from '@/components/MonthCalendar';
 import PageHeader from '@/components/PageHeader';
 import { MyUserContext } from '@/config/Contexts';
-import { useThemeColors, useThemeStyles } from '@/constants/theme';
+import { fonts, useThemeColors, useThemeStyles } from '@/constants/theme';
 import { getErrorMessage } from '@/services/auth';
 import { getProjects } from '@/services/projects';
 import { formatScheduleTime, getScheduleDayKey, getSchedules } from '@/services/schedules';
@@ -120,38 +122,41 @@ function ScheduledContent({ menuButton }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
+      <StatusBar style={colors.statusBar} />
       <PageHeader title="Đã lên lịch" left={menuButton} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.page}>
-          <MonthCalendar
-            year={view.year}
-            month={view.month}
-            selectedKey={selectedKey}
-            markedKeys={markedKeys}
-            onSelectDay={selectDay}
-            onChangeMonth={changeMonth}
-          />
+          <FadeIn distance={18}>
+            <MonthCalendar
+              year={view.year}
+              month={view.month}
+              selectedKey={selectedKey}
+              markedKeys={markedKeys}
+              onSelectDay={selectDay}
+              onChangeMonth={changeMonth}
+            />
+          </FadeIn>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          {schedules === null ? <ActivityIndicator color={colors.text} style={styles.loading} /> : null}
+          {schedules === null ? <ActivityIndicator color={colors.gold} style={styles.loading} /> : null}
 
           {schedules?.length === 0 && !error ? (
-            <View style={styles.empty}>
+            <FadeIn style={styles.empty} delay={150}>
+              <Breathing style={styles.emptyIcon} duration={3200} scaleTo={1.06}><ClockIcon size={26} color={colors.gold} /></Breathing>
               <Text style={styles.emptyTitle}>Chưa có lịch nào</Text>
               <Text style={styles.emptyBody}>Mở một dự án và đặt lịch ngay trong Chat, lịch sẽ hiện ở đây.</Text>
-            </View>
+            </FadeIn>
           ) : null}
 
           {schedules?.length > 0 && daySchedules.length === 0 ? (
-            <Text style={styles.noSchedule}>Không có lịch trong ngày này</Text>
+            <FadeIn key={`none-${selectedKey}`}><Text style={styles.noSchedule}>Không có lịch trong ngày này</Text></FadeIn>
           ) : null}
 
           {daySchedules.length > 0 ? (
-            <View style={styles.card}>
+            <FadeIn key={`day-${selectedKey}`} style={styles.card} delay={80}>
               {daySchedules.map((schedule, index) => (
+                <FadeIn key={schedule.id} delay={stagger(index, 60, 140)} axis="x" distance={14}>
                 <Pressable
-                  key={schedule.id}
                   onPress={() => setSelectedId(schedule.id)}
                   style={({ pressed }) => [styles.row, pressed && styles.pressed]}
                   accessibilityRole="button"
@@ -159,17 +164,21 @@ function ScheduledContent({ menuButton }) {
                   aria-selected={schedule.id === selectedId}
                 >
                   <View style={[styles.rowBody, index > 0 && styles.rowDivider]}>
-                    <Text style={styles.rowTime}>{formatScheduleTime(schedule).slice(11)}</Text>
+                    <View style={[styles.timeChip, schedule.id === selectedId && styles.timeChipSelected]}>
+                      <Text style={[styles.rowTime, schedule.id === selectedId && styles.rowTimeSelected]}>{formatScheduleTime(schedule).slice(11)}</Text>
+                    </View>
                     <Text style={styles.rowLabel} numberOfLines={1}>{schedule.task_name}</Text>
-                    <ChevronRightIcon size={20} color={colors.textSecondary} />
+                    <ChevronRightIcon size={18} color={schedule.id === selectedId ? colors.gold : colors.textMuted} />
                   </View>
                 </Pressable>
+                </FadeIn>
               ))}
-            </View>
+            </FadeIn>
           ) : null}
 
           {selected ? (
-            <View style={styles.detail}>
+            <FadeIn key={`detail-${selected.id}`} style={styles.detail} distance={20}>
+              <Eyebrow>Chi tiết lịch đăng</Eyebrow>
               <DetailRow label="Tên" value={selected.task_name} />
               <DetailRow label="Thời gian" value={formatScheduleTime(selected)} />
               {selected.platforms.length > 0 ? (
@@ -195,9 +204,9 @@ function ScheduledContent({ menuButton }) {
                     {projectName || 'Không tìm thấy dự án'}
                   </Text>
                 </View>
-                {projectName ? <ChevronRightIcon size={20} color={colors.textSecondary} /> : null}
+                {projectName ? <ChevronRightIcon size={18} color={colors.gold} /> : null}
               </Pressable>
-            </View>
+            </FadeIn>
           ) : null}
         </View>
       </ScrollView>
@@ -212,7 +221,7 @@ const createStyles = (colors) => StyleSheet.create({
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 10,
     paddingBottom: 40,
   },
   page: {
@@ -225,38 +234,61 @@ const createStyles = (colors) => StyleSheet.create({
   },
   error: {
     color: colors.error,
-    fontSize: 14,
+    fontSize: 13.5,
     textAlign: 'center',
-    marginTop: 24,
+    marginTop: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.errorBorder,
+    backgroundColor: colors.errorSoft,
+    overflow: 'hidden',
   },
   empty: {
     alignItems: 'center',
-    marginTop: 32,
+    marginTop: 28,
     paddingHorizontal: 16,
+  },
+  emptyIcon: {
+    width: 60,
+    height: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    backgroundColor: colors.goldSoft,
+    marginBottom: 16,
   },
   emptyTitle: {
     color: colors.text,
-    fontSize: 17,
+    fontFamily: fonts.display,
+    fontSize: 20,
     fontWeight: '600',
   },
   emptyBody: {
     color: colors.textSecondary,
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 21,
     textAlign: 'center',
     marginTop: 8,
+    maxWidth: 320,
   },
   noSchedule: {
-    color: colors.textSecondary,
-    fontSize: 16,
+    color: colors.textMuted,
+    fontSize: 14.5,
+    fontStyle: 'italic',
     textAlign: 'center',
     marginTop: 24,
   },
   card: {
     marginTop: 16,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
+    padding: 6,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.card,
   },
   row: {
     flexDirection: 'row',
@@ -266,56 +298,84 @@ const createStyles = (colors) => StyleSheet.create({
   },
   rowBody: {
     flex: 1,
-    minHeight: 52,
+    minHeight: 58,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingVertical: 8,
+    paddingHorizontal: 10,
   },
   rowDivider: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.divider,
+    borderTopColor: colors.borderStrong,
+  },
+  timeChip: {
+    minWidth: 62,
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.goldBorder,
+    backgroundColor: colors.goldSoft,
+  },
+  timeChipSelected: {
+    borderColor: colors.gold,
+    backgroundColor: colors.gold,
   },
   rowTime: {
-    color: colors.textSecondary,
-    fontSize: 16,
+    color: colors.gold,
+    fontSize: 14,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  rowTimeSelected: {
+    color: colors.onPrimary,
   },
   rowLabel: {
     flex: 1,
     color: colors.text,
-    fontSize: 17,
+    fontSize: 15.5,
+    fontWeight: '500',
   },
   detail: {
-    gap: 12,
+    gap: 16,
     marginTop: 16,
-    padding: 16,
-    borderRadius: 20,
-    backgroundColor: colors.surface,
+    padding: 20,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    backgroundColor: colors.card,
   },
   detailRow: {
-    gap: 4,
+    gap: 5,
   },
   contentSection: {
     gap: 8,
   },
   detailLabel: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '600',
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
   detailValue: {
     color: colors.text,
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 15.5,
+    lineHeight: 23,
   },
   projectRow: {
-    minHeight: 44,
+    minHeight: 56,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderStrong,
   },
   projectText: {
     flex: 1,
-    gap: 4,
+    gap: 5,
   },
 });

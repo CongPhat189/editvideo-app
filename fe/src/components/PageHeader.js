@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { BackIcon } from '@/components/HomeIcons';
-import { useThemeStyles } from '@/constants/theme';
+import { fonts, useThemeStyles } from '@/constants/theme';
 import useTopBarSpace from '@/hooks/useTopBarSpace';
 
 const goBack = () => {
@@ -40,7 +40,7 @@ const createStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 16,
-    paddingBottom: 4,
+    paddingBottom: 6,
   },
   backButton: {
     width: 44,
@@ -49,17 +49,20 @@ const createStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.divider,
+    borderColor: colors.borderStrong,
     backgroundColor: colors.surface,
   },
   pressed: {
     opacity: 0.7,
+    transform: [{ scale: 0.96 }],
   },
   title: {
     flex: 1,
     color: colors.text,
-    fontSize: 17,
+    fontFamily: fonts.display,
+    fontSize: 19,
     fontWeight: '600',
+    letterSpacing: 0.2,
     textAlign: 'center',
   },
   spacer: {

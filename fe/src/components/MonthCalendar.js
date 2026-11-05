@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { BackIcon, ChevronRightIcon } from '@/components/HomeIcons';
-import { useThemeStyles } from '@/constants/theme';
+import { FadeIn, PopIn } from '@/components/Motion';
+import { fonts, useThemeColors, useThemeStyles } from '@/constants/theme';
 
 const WEEKDAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
@@ -19,13 +20,14 @@ const buildCells = (year, month) => {
 };
 
 export default function MonthCalendar({ year, month, selectedKey, minKey, markedKeys, onSelectDay, onChangeMonth }) {
+  const colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
 
   const todayKey = toDayKey(new Date());
   const cells = buildCells(year, month);
 
   return (
-    <View>
+    <View style={styles.calendar}>
       <View style={styles.monthRow}>
         <Pressable
           onPress={() => onChangeMonth(-1)}
@@ -33,7 +35,7 @@ export default function MonthCalendar({ year, month, selectedKey, minKey, marked
           accessibilityRole="button"
           accessibilityLabel="Tháng trước"
         >
-          <BackIcon size={22} />
+          <BackIcon size={19} color={colors.textSecondary} />
         </Pressable>
         <Text style={styles.monthTitle}>Tháng {month + 1}, {year}</Text>
         <Pressable
@@ -42,11 +44,11 @@ export default function MonthCalendar({ year, month, selectedKey, minKey, marked
           accessibilityRole="button"
           accessibilityLabel="Tháng sau"
         >
-          <ChevronRightIcon size={22} />
+          <ChevronRightIcon size={19} color={colors.textSecondary} />
         </Pressable>
       </View>
 
-      <View style={styles.grid}>
+      <FadeIn key={`${year}-${month}`} style={styles.grid} distance={8} duration={380}>
         {WEEKDAYS.map((weekday) => (
           <View key={weekday} style={styles.cell}>
             <Text style={styles.weekday}>{weekday}</Text>
@@ -69,39 +71,56 @@ export default function MonthCalendar({ year, month, selectedKey, minKey, marked
               accessibilityState={{ disabled }}
               aria-selected={selected}
             >
-              <View style={[styles.day, key === todayKey && styles.today, selected && styles.daySelected, disabled && styles.dayDisabled]}>
-                <Text style={[styles.dayText, selected && styles.dayTextSelected]}>{day}</Text>
+              <PopIn
+                key={selected ? 'selected' : 'idle'}
+                from={selected ? 0.7 : 1}
+                style={[styles.day, key === todayKey && styles.today, selected && styles.daySelected, disabled && styles.dayDisabled]}
+              >
+                <Text style={[styles.dayText, key === todayKey && styles.dayTextToday, selected && styles.dayTextSelected]}>{day}</Text>
                 {marked ? <View style={[styles.dot, selected && styles.dotSelected]} /> : null}
-              </View>
+              </PopIn>
             </Pressable>
           );
         })}
-      </View>
+      </FadeIn>
     </View>
   );
 }
 
 const createStyles = (colors) => StyleSheet.create({
+  calendar: {
+    padding: 12,
+    paddingBottom: 10,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.card,
+  },
   monthRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   monthButton: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 22,
+    borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
   },
   pressed: {
     opacity: 0.7,
   },
   monthTitle: {
     color: colors.text,
-    fontSize: 17,
+    fontFamily: fonts.display,
+    fontSize: 19,
     fontWeight: '600',
+    letterSpacing: 0.2,
   },
   grid: {
     flexDirection: 'row',
@@ -109,48 +128,56 @@ const createStyles = (colors) => StyleSheet.create({
   },
   cell: {
     width: `${100 / 7}%`,
-    minHeight: 44,
+    minHeight: 46,
     alignItems: 'center',
     justifyContent: 'center',
   },
   weekday: {
-    color: colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '600',
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
   day: {
     width: 40,
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 20,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: 'transparent',
   },
   today: {
-    borderColor: colors.divider,
+    borderColor: colors.goldBorder,
+    backgroundColor: colors.goldSoft,
   },
   daySelected: {
+    borderColor: colors.gold,
     backgroundColor: colors.primary,
   },
   dayDisabled: {
-    opacity: 0.3,
+    opacity: 0.28,
   },
   dayText: {
     color: colors.text,
-    fontSize: 16,
+    fontSize: 15.5,
+    fontVariant: ['tabular-nums'],
+  },
+  dayTextToday: {
+    color: colors.gold,
+    fontWeight: '700',
   },
   dayTextSelected: {
     color: colors.onPrimary,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   dot: {
     position: 'absolute',
     bottom: 4,
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: colors.accent,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.gold,
   },
   dotSelected: {
     backgroundColor: colors.onPrimary,

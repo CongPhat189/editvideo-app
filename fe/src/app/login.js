@@ -6,6 +6,7 @@ import AuthButton from '@/components/AuthButton';
 import AuthField from '@/components/AuthField';
 import { LockIcon, PhoneIcon } from '@/components/AuthIcons';
 import AuthScreen from '@/components/AuthScreen';
+import { FadeIn } from '@/components/Motion';
 import { MyUserContext } from '@/config/Contexts';
 import { useThemeStyles } from '@/constants/theme';
 import { getErrorMessage, isValidPhone, login } from '@/services/auth';
@@ -85,7 +86,7 @@ export default function Login() {
         onSubmitEditing={handleLogin}
       />
 
-      {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+      {formError ? <FadeIn key={formError} distance={-6} duration={320}><Text style={styles.formError}>{formError}</Text></FadeIn> : null}
       <AuthButton title="Đăng nhập" onPress={handleLogin} loading={loading} />
 
       <Pressable
@@ -115,40 +116,52 @@ export default function Login() {
 const createStyles = (colors) => StyleSheet.create({
   formError: {
     color: colors.error,
-    fontSize: 14,
+    fontSize: 13.5,
+    lineHeight: 19,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.errorBorder,
+    backgroundColor: colors.errorSoft,
+    overflow: 'hidden',
   },
   forgot: {
     alignSelf: 'center',
     marginTop: 16,
   },
   forgotText: {
-    color: colors.text,
-    fontSize: 14,
+    color: colors.gold,
+    fontSize: 13.5,
     fontWeight: '600',
+    letterSpacing: 0.2,
   },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginVertical: 16,
+    marginVertical: 18,
   },
   dividerLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.divider,
+    backgroundColor: colors.borderStrong,
   },
   dividerText: {
     color: colors.textMuted,
-    fontSize: 13,
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
   },
   footerText: {
-    color: colors.textMuted,
-    fontSize: 13,
+    color: colors.textSecondary,
+    fontSize: 14,
   },
   footerLink: {
-    color: colors.text,
-    fontWeight: '600',
+    color: colors.gold,
+    fontWeight: '700',
   },
 });

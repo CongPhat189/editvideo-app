@@ -136,6 +136,8 @@ const createStyles = (colors) => StyleSheet.create({
   label: {
     color: colors.text,
     fontSize: 30,
+    fontWeight: '300',
+    letterSpacing: 1,
     fontVariant: ['tabular-nums'],
   },
 });

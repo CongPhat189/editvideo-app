@@ -6,6 +6,7 @@ import AuthButton from '@/components/AuthButton';
 import AuthField from '@/components/AuthField';
 import { LockIcon, PhoneIcon, UserIcon } from '@/components/AuthIcons';
 import AuthScreen from '@/components/AuthScreen';
+import { FadeIn } from '@/components/Motion';
 import { MyUserContext } from '@/config/Contexts';
 import { useThemeStyles } from '@/constants/theme';
 import { getErrorMessage, isValidPhone, MIN_PASSWORD_LENGTH, register } from '@/services/auth';
@@ -122,7 +123,7 @@ export default function Register() {
         onSubmitEditing={handleRegister}
       />
 
-      {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+      {formError ? <FadeIn key={formError} distance={-6} duration={320}><Text style={styles.formError}>{formError}</Text></FadeIn> : null}
       <AuthButton title="Đăng ký" onPress={handleRegister} loading={loading} />
     </AuthScreen>
   );
@@ -131,16 +132,24 @@ export default function Register() {
 const createStyles = (colors) => StyleSheet.create({
   formError: {
     color: colors.error,
-    fontSize: 14,
+    fontSize: 13.5,
+    lineHeight: 19,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.errorBorder,
+    backgroundColor: colors.errorSoft,
+    overflow: 'hidden',
   },
   footerText: {
-    color: colors.textMuted,
-    fontSize: 13,
+    color: colors.textSecondary,
+    fontSize: 14,
   },
   footerLink: {
-    color: colors.text,
-    fontWeight: '600',
+    color: colors.gold,
+    fontWeight: '700',
   },
 });

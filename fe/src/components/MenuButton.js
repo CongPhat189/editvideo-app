@@ -15,7 +15,7 @@ export default function MenuButton({ expanded, onPress }) {
       accessibilityLabel="Mở menu"
       aria-expanded={expanded}
     >
-      <MenuIcon size={22} />
+      <MenuIcon size={20} />
     </Pressable>
   );
 }
@@ -28,10 +28,11 @@ const createStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.divider,
+    borderColor: colors.borderStrong,
     backgroundColor: colors.surface,
   },
   pressed: {
     opacity: 0.7,
+    transform: [{ scale: 0.96 }],
   },
 });

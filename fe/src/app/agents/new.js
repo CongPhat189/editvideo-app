@@ -14,7 +14,7 @@ export default function NewAgent() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
+      <StatusBar style={colors.statusBar} />
       <PageHeader title="Thêm Agent" />
       <KeyboardAvoidingView
         style={styles.flex}
@@ -37,7 +37,7 @@ export default function NewAgent() {
 const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.backgroundDeep,
+    backgroundColor: colors.background,
   },
   flex: {
     flex: 1,
@@ -51,5 +51,10 @@ const createStyles = (colors) => StyleSheet.create({
     width: '100%',
     maxWidth: 560,
     alignSelf: 'center',
+    padding: 20,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.card,
   },
 });

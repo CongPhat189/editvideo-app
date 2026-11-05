@@ -8,10 +8,12 @@ import AuthButton from '@/components/AuthButton';
 import { MessageAttachments } from '@/components/ChatAttachments';
 import { CheckIcon } from '@/components/HomeIcons';
 import MonthCalendar from '@/components/MonthCalendar';
+import { Eyebrow } from '@/components/Luxe';
+import { FadeIn, PopIn, stagger } from '@/components/Motion';
 import PageHeader from '@/components/PageHeader';
 import TimePickerSheet from '@/components/TimePickerSheet';
 import { MyUserContext } from '@/config/Contexts';
-import { useThemeColors, useThemeStyles } from '@/constants/theme';
+import { fonts, useThemeColors, useThemeStyles } from '@/constants/theme';
 import { getErrorMessage } from '@/services/auth';
 import { createSchedule, getScheduleNow, getSchedules, PLATFORMS, validateScheduleTime } from '@/services/schedules';
 import { getMessages } from '@/services/projects';
@@ -175,20 +177,24 @@ export default function NewSchedule() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
+      <StatusBar style={colors.statusBar} />
       <PageHeader title="Đặt lịch" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.page}>
+          <FadeIn style={styles.intro}>
+            <Eyebrow>Lên lịch đăng</Eyebrow>
+            <Text style={styles.introTitle}>Chọn nền tảng và thời gian</Text>
+          </FadeIn>
           <Text style={styles.sectionTitle}>Nội dung đã chọn</Text>
-          <View style={styles.contentPreview}>
+          <FadeIn style={styles.contentPreview} delay={100}>
             {availableMessages === null ? (
-              <ActivityIndicator color={colors.text} />
+              <ActivityIndicator color={colors.gold} />
             ) : selectedContent ? (
               <Text style={styles.contentPreviewText}>{getMessageLabel(selectedContent)}</Text>
             ) : (
               <Text style={styles.contentPreviewText}>Không tìm thấy nội dung đã chọn</Text>
             )}
-          </View>
+          </FadeIn>
           {contentLoadError ? <Text style={styles.error}>{contentLoadError}</Text> : null}
           {contentError ? <Text style={styles.error}>{contentError}</Text> : null}
           {selectedContent?.attachments?.length ? (
@@ -199,26 +205,28 @@ export default function NewSchedule() {
 
           <Text style={styles.sectionTitle}>Nền tảng muốn đăng</Text>
           <View style={styles.platforms}>
-            {PLATFORMS.map((platform) => {
+            {PLATFORMS.map((platform, index) => {
               const checked = platforms.includes(platform);
               return (
+                <FadeIn key={platform} delay={stagger(index, 50, 180)} distance={10}>
                 <Pressable
-                  key={platform}
                   onPress={() => togglePlatform(platform)}
                   style={({ pressed }) => [styles.platform, checked && styles.platformChecked, pressed && styles.pressed]}
                   accessibilityRole="checkbox"
                   accessibilityLabel={platform}
                   accessibilityState={{ checked }}
                 >
-                  {checked ? <CheckIcon size={16} color={colors.onPrimary} /> : null}
+                  {checked ? <PopIn><CheckIcon size={16} color={colors.onPrimary} /></PopIn> : null}
                   <Text style={[styles.platformLabel, checked && styles.platformLabelChecked]}>{platform}</Text>
                 </Pressable>
+                </FadeIn>
               );
             })}
           </View>
           {platformError ? <Text style={styles.error}>{platformError}</Text> : null}
 
           <Text style={[styles.sectionTitle, styles.dateTitle]}>Ngày đăng</Text>
+          <FadeIn delay={320} distance={18}>
           <MonthCalendar
             year={view.year}
             month={view.month}
@@ -228,11 +236,12 @@ export default function NewSchedule() {
             onSelectDay={selectDay}
             onChangeMonth={changeMonth}
           />
+          </FadeIn>
 
           {selectedKey ? (
-            <View style={styles.timeButton}>
+            <FadeIn style={styles.timeButton} distance={10}>
               <AuthButton title="Chọn giờ" onPress={openTimePicker} />
-            </View>
+            </FadeIn>
           ) : null}
         </View>
       </ScrollView>
@@ -257,11 +266,11 @@ export default function NewSchedule() {
 const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.backgroundDeep,
+    backgroundColor: colors.background,
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 12,
     paddingBottom: 40,
   },
   page: {
@@ -269,67 +278,90 @@ const createStyles = (colors) => StyleSheet.create({
     maxWidth: 560,
     alignSelf: 'center',
   },
+  intro: {
+    marginBottom: 0,
+  },
+  introTitle: {
+    color: colors.text,
+    fontFamily: fonts.display,
+    fontSize: 24,
+    lineHeight: 31,
+    fontWeight: '600',
+    marginTop: 8,
+  },
   sectionTitle: {
     color: colors.textSecondary,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    marginBottom: 12,
+    letterSpacing: 0.4,
+    marginTop: 24,
+    marginBottom: 10,
+    marginLeft: 2,
   },
   contentPreview: {
-    minHeight: 52,
+    minHeight: 56,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderLeftWidth: 3,
+    borderColor: colors.borderStrong,
+    borderLeftColor: colors.gold,
+    backgroundColor: colors.card,
   },
   contentPreviewText: {
     color: colors.text,
     fontSize: 15,
-    lineHeight: 21,
+    lineHeight: 22,
     alignSelf: 'stretch',
   },
   selectedAttachments: {
     marginTop: 10,
   },
   dateTitle: {
-    marginTop: 24,
-    marginBottom: 4,
+    marginTop: 28,
+    marginBottom: 10,
   },
   platforms: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
   },
   platform: {
     minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
+    gap: 7,
+    paddingHorizontal: 18,
     borderRadius: 22,
-    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.card,
   },
   platformChecked: {
+    borderColor: colors.gold,
     backgroundColor: colors.primary,
   },
   pressed: {
-    opacity: 0.7,
+    opacity: 0.75,
   },
   platformLabel: {
     color: colors.text,
-    fontSize: 15,
+    fontSize: 14.5,
+    fontWeight: '500',
   },
   platformLabelChecked: {
     color: colors.onPrimary,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   error: {
     color: colors.error,
-    fontSize: 14,
-    marginTop: 12,
+    fontSize: 13.5,
+    lineHeight: 19,
+    marginTop: 10,
   },
   timeButton: {
-    marginTop: 16,
+    marginTop: 20,
   },
 });

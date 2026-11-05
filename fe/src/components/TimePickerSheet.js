@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AuthButton from '@/components/AuthButton';
 import { CloseIcon } from '@/components/HomeIcons';
 import TimeWheel, { CENTER_ROW, ROW_HEIGHT } from '@/components/TimeWheel';
-import { useThemeStyles } from '@/constants/theme';
+import { fonts, useThemeStyles } from '@/constants/theme';
 import useReducedMotion from '@/hooks/useReducedMotion';
 
 const OPEN_DURATION = 280;
@@ -55,6 +55,7 @@ export default function TimePickerSheet({
         <Pressable style={styles.flex} onPress={onClose} accessibilityRole="button" accessibilityLabel="Đóng" />
       </Animated.View>
       <Animated.View style={[styles.sheet, { paddingBottom: insets.bottom + 16, transform: [{ translateY }] }]}>
+        <View style={styles.handle} />
         <View style={styles.header}>
           <Text style={styles.title} numberOfLines={1}>{title}</Text>
           <Pressable
@@ -63,7 +64,7 @@ export default function TimePickerSheet({
             accessibilityRole="button"
             accessibilityLabel="Đóng"
           >
-            <CloseIcon size={22} />
+            <CloseIcon size={18} />
           </Pressable>
         </View>
 
@@ -93,14 +94,30 @@ const createStyles = (colors) => StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    backgroundColor: colors.background,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0,
+    borderColor: colors.goldBorder,
+    backgroundColor: colors.backgroundDeep,
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.3,
+    shadowRadius: 30,
+    shadowOffset: { width: 0, height: -8 },
+    elevation: 16,
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.borderStrong,
+    marginBottom: 8,
   },
   header: {
-    minHeight: 44,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
@@ -108,16 +125,19 @@ const createStyles = (colors) => StyleSheet.create({
   title: {
     flex: 1,
     color: colors.text,
-    fontSize: 17,
+    fontFamily: fonts.display,
+    fontSize: 19,
     fontWeight: '600',
   },
   close: {
-    width: 44,
-    height: 44,
+    width: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 22,
-    marginRight: -10,
+    borderRadius: 19,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
   },
   pressed: {
     opacity: 0.7,
@@ -126,7 +146,7 @@ const createStyles = (colors) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 24,
-    marginBottom: 16,
+    marginBottom: 18,
   },
   band: {
     position: 'absolute',
@@ -135,11 +155,13 @@ const createStyles = (colors) => StyleSheet.create({
     top: CENTER_ROW * ROW_HEIGHT,
     height: ROW_HEIGHT,
     borderRadius: 14,
-    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    backgroundColor: colors.goldSoft,
   },
   error: {
     color: colors.error,
-    fontSize: 14,
+    fontSize: 13.5,
     textAlign: 'center',
     marginBottom: 12,
   },

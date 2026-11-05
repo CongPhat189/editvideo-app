@@ -3,8 +3,10 @@ import { StatusBar } from 'expo-status-bar';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BackIcon } from '@/components/HomeIcons';
-import { useAppTheme, useThemeColors, useThemeStyles } from '@/constants/theme';
+import { BackIcon, CheckIcon } from '@/components/HomeIcons';
+import { Eyebrow } from '@/components/Luxe';
+import { FadeIn, PopIn } from '@/components/Motion';
+import { fonts, palettes, useAppTheme, useThemeColors, useThemeStyles } from '@/constants/theme';
 
 export default function Settings() {
   const colors = useThemeColors();
@@ -33,7 +35,8 @@ export default function Settings() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <View style={styles.content}>
+      <FadeIn style={styles.content} distance={18}>
+        <Eyebrow style={styles.eyebrow}>Tùy chỉnh</Eyebrow>
         <Text style={styles.sectionTitle}>Giao diện</Text>
         <Text style={styles.description}>Chọn giao diện bạn muốn sử dụng.</Text>
         <View style={styles.themeCard}>
@@ -51,12 +54,23 @@ export default function Settings() {
                 accessibilityLabel={`Giao diện ${label.toLowerCase()}`}
                 accessibilityState={{ selected }}
               >
-                <Text style={[styles.themeChoiceText, selected && styles.themeChoiceTextSelected]}>{label}</Text>
+                <View style={[styles.preview, { backgroundColor: palettes[value].background, borderColor: palettes[value].borderStrong }]}>
+                  <View style={[styles.previewBar, { backgroundColor: palettes[value].gold }]} />
+                  <View style={[styles.previewLine, { backgroundColor: palettes[value].textMuted }]} />
+                  <View style={[styles.previewLine, styles.previewLineShort, { backgroundColor: palettes[value].divider }]} />
+                  <View style={[styles.previewCard, { backgroundColor: palettes[value].card, borderColor: palettes[value].goldBorder }]} />
+                </View>
+                <View style={styles.choiceFooter}>
+                  <Text style={[styles.themeChoiceText, selected && styles.themeChoiceTextSelected]}>{label}</Text>
+                  <View style={[styles.radio, selected && styles.radioSelected]}>
+                    {selected ? <PopIn><CheckIcon size={12} color={colors.onPrimary} /></PopIn> : null}
+                  </View>
+                </View>
               </Pressable>
             );
           })}
         </View>
-      </View>
+      </FadeIn>
     </View>
   );
 }
@@ -64,65 +78,109 @@ export default function Settings() {
 const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.backgroundDeep,
+    backgroundColor: colors.background,
   },
   header: {
-    minHeight: 56,
+    minHeight: 60,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.divider,
+    borderBottomColor: colors.borderStrong,
   },
   backButton: {
-    width: 40,
-    height: 40,
+    width: 42,
+    height: 42,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 20,
+    borderRadius: 21,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
   },
   title: {
     color: colors.text,
-    fontSize: 17,
+    fontFamily: fonts.display,
+    fontSize: 19,
     fontWeight: '600',
   },
   headerSpacer: {
-    width: 40,
+    width: 42,
   },
   content: {
     width: '100%',
     maxWidth: 560,
     alignSelf: 'center',
     padding: 20,
+    paddingTop: 28,
+  },
+  eyebrow: {
+    marginBottom: 8,
   },
   sectionTitle: {
     color: colors.text,
-    fontSize: 20,
+    fontFamily: fonts.display,
+    fontSize: 26,
     fontWeight: '600',
   },
   description: {
     color: colors.textSecondary,
-    fontSize: 14,
+    fontSize: 14.5,
     marginTop: 6,
   },
   themeCard: {
     flexDirection: 'row',
-    gap: 10,
-    marginTop: 18,
-    padding: 6,
-    borderRadius: 16,
-    backgroundColor: colors.surface,
+    gap: 12,
+    marginTop: 22,
   },
   themeChoice: {
     flex: 1,
-    minHeight: 46,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
+    padding: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.card,
   },
   themeChoiceSelected: {
-    backgroundColor: colors.primary,
+    borderColor: colors.gold,
+    backgroundColor: colors.goldSoft,
+  },
+  preview: {
+    height: 96,
+    padding: 10,
+    gap: 6,
+    borderRadius: 13,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  previewBar: {
+    width: 28,
+    height: 6,
+    borderRadius: 3,
+  },
+  previewLine: {
+    width: '80%',
+    height: 5,
+    borderRadius: 3,
+    opacity: 0.6,
+  },
+  previewLineShort: {
+    width: '55%',
+  },
+  previewCard: {
+    flex: 1,
+    marginTop: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  choiceFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    paddingTop: 12,
+    paddingBottom: 4,
   },
   themeChoiceText: {
     color: colors.textSecondary,
@@ -130,7 +188,20 @@ const createStyles = (colors) => StyleSheet.create({
     fontWeight: '600',
   },
   themeChoiceTextSelected: {
-    color: colors.onPrimary,
+    color: colors.text,
+  },
+  radio: {
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.borderStrong,
+  },
+  radioSelected: {
+    borderColor: colors.gold,
+    backgroundColor: colors.gold,
   },
   pressed: {
     opacity: 0.7,

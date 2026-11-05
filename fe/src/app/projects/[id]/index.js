@@ -17,9 +17,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MessageAttachments, PendingAttachments } from '@/components/ChatAttachments';
 import DrawerScreen from '@/components/DrawerScreen';
 import { AgentIcon, CalendarIcon, MicIcon, PlusIcon, SendIcon } from '@/components/HomeIcons';
+import { AmbientGlow, BrandMark, GoldGradient } from '@/components/Luxe';
+import { Breathing, FadeIn, PopIn, Shimmer, TypingDots } from '@/components/Motion';
 import PageHeader from '@/components/PageHeader';
 import { MyUserContext } from '@/config/Contexts';
-import { useThemeColors, useThemeStyles } from '@/constants/theme';
+import { fonts, useThemeColors, useThemeStyles } from '@/constants/theme';
 import { MAX_FILES, pickMedia } from '@/services/attachments';
 import { getErrorMessage } from '@/services/auth';
 import {
@@ -34,7 +36,14 @@ const POLL_INTERVAL = 3000;
 const MAX_MESSAGE_LENGTH = 20000;
 const IN_PROGRESS = ['pending', 'processing'];
 
-const MessageBubble = ({ message, showScheduleButton, onLongPress, onSchedule }) => {
+const MessageBubble = (props) => (
+  // Danh sách đảo ngược (inverted) nên dùng khoảng cách âm để tin nhắn trồi lên từ dưới
+  <FadeIn distance={props.message.role === 'user' ? -10 : -14} duration={420}>
+    <MessageContent {...props} />
+  </FadeIn>
+);
+
+const MessageContent = ({ message, showScheduleButton, onLongPress, onSchedule }) => {
   const colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
 
@@ -54,18 +63,30 @@ const MessageBubble = ({ message, showScheduleButton, onLongPress, onSchedule })
   if (IN_PROGRESS.includes(message.status)) {
     return (
       <View style={styles.replyPending}>
-        <ActivityIndicator size="small" color={colors.textSecondary} />
-        <Text style={styles.pendingText}>Agent đang trả lời…</Text>
+        <BrandMark size={24} />
+        <View style={styles.pendingPill}>
+          <TypingDots />
+          <Text style={styles.pendingText}>Agent đang trả lời</Text>
+        </View>
       </View>
     );
   }
   if (message.status === 'failed') {
-    return <Text style={styles.failedText}>{message.error_message || 'Agent không trả lời được'}</Text>;
+    return (
+      <View style={styles.failedBox}>
+        <Text style={styles.failedText}>{message.error_message || 'Agent không trả lời được'}</Text>
+      </View>
+    );
   }
   const canSchedule = Boolean(message.content?.trim() || attachments.length > 0);
   return (
     <View style={styles.replyMessage}>
+      <View style={styles.replyHeader}>
+        <BrandMark size={24} />
+        <Text style={styles.replyAuthor}>Agent</Text>
+      </View>
       <Pressable
+        style={styles.replyBody}
         onLongPress={onLongPress}
         delayLongPress={350}
         disabled={message.status !== 'completed' || !canSchedule}
@@ -76,15 +97,17 @@ const MessageBubble = ({ message, showScheduleButton, onLongPress, onSchedule })
         {message.content ? <Text style={styles.messageText}>{message.content}</Text> : null}
       </Pressable>
       {showScheduleButton ? (
+        <PopIn from={0.8}>
         <Pressable
           onPress={onSchedule}
           style={({ pressed }) => [styles.scheduleMessageButton, pressed && styles.pressed]}
           accessibilityRole="button"
           accessibilityLabel="Đặt lịch nội dung này"
         >
-          <CalendarIcon size={15} color={colors.textSecondary} />
+          <CalendarIcon size={15} color={colors.gold} />
           <Text style={styles.scheduleMessageButtonText}>Đặt lịch</Text>
         </Pressable>
+        </PopIn>
       ) : null}
     </View>
   );
@@ -234,7 +257,8 @@ function ChatContent({ id, menuButton }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
+      <StatusBar style={colors.statusBar} />
+      <AmbientGlow height={260} intensity={0.6} />
       <PageHeader title={project?.title || ''} left={menuButton} />
       <KeyboardAvoidingView
         style={styles.flex}
@@ -242,7 +266,7 @@ function ChatContent({ id, menuButton }) {
       >
         {loading ? (
           <View style={styles.center}>
-            <ActivityIndicator color={colors.text} />
+            <ActivityIndicator color={colors.gold} />
           </View>
         ) : null}
         {!loading && loadError ? (
@@ -252,11 +276,15 @@ function ChatContent({ id, menuButton }) {
         ) : null}
         {!loading && !loadError && messages.length === 0 ? (
           <View style={styles.center}>
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIcon}><AgentIcon size={24} /></View>
+            <FadeIn style={styles.emptyState} distance={18}>
+              <Breathing style={styles.emptyIcon} duration={3200} scaleTo={1.06}>
+                <GoldGradient />
+                <Shimmer interval={2400} />
+                <View><AgentIcon size={26} color={colors.onPrimary} /></View>
+              </Breathing>
               <Text style={styles.emptyTitle}>Bắt đầu cuộc trò chuyện</Text>
               <Text style={styles.emptyText}>Mô tả video bạn muốn tạo. Bạn cũng có thể gửi ảnh hoặc video để Agent tham khảo.</Text>
-            </View>
+            </FadeIn>
           </View>
         ) : null}
         {!loading && !loadError && messages.length > 0 ? (
@@ -314,7 +342,7 @@ function ChatContent({ id, menuButton }) {
                   accessibilityRole="button"
                   accessibilityLabel="Thêm ảnh hoặc video"
                 >
-                  <PlusIcon size={20} />
+                  <PlusIcon size={19} color={colors.textSecondary} />
                 </Pressable>
                 <Pressable
                   onPress={() => inputRef.current?.focus()}
@@ -324,7 +352,7 @@ function ChatContent({ id, menuButton }) {
                   accessibilityLabel="Mở bàn phím để nhập bằng giọng nói"
                   accessibilityState={{ disabled: sending }}
                 >
-                  <MicIcon size={20} />
+                  <MicIcon size={19} color={colors.textSecondary} />
                 </Pressable>
               </View>
               <Pressable
@@ -335,7 +363,10 @@ function ChatContent({ id, menuButton }) {
                 accessibilityLabel="Gửi"
                 accessibilityState={{ disabled: !canSend }}
               >
-                <SendIcon size={21} color={canSend ? colors.onPrimary : colors.textMuted} />
+                {canSend ? <GoldGradient /> : null}
+                <PopIn key={canSend ? 'ready' : 'idle'} from={canSend ? 0.5 : 0.85}>
+                  <SendIcon size={20} color={canSend ? colors.onPrimary : colors.textMuted} />
+                </PopIn>
               </Pressable>
             </View>
           </View>
@@ -365,31 +396,32 @@ const createStyles = (colors) => StyleSheet.create({
     maxWidth: 340,
   },
   emptyIcon: {
-    width: 52,
-    height: 52,
+    width: 64,
+    height: 64,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 18,
-    backgroundColor: colors.surface,
-    marginBottom: 16,
+    borderRadius: 20,
+    overflow: 'hidden',
+    marginBottom: 20,
   },
   emptyTitle: {
     color: colors.text,
-    fontSize: 18,
+    fontFamily: fonts.display,
+    fontSize: 22,
     fontWeight: '600',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   emptyText: {
     color: colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 14.5,
+    lineHeight: 22,
     textAlign: 'center',
   },
   messages: {
-    gap: 12,
+    gap: 18,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
   },
   userMessage: {
     alignItems: 'flex-end',
@@ -397,42 +429,88 @@ const createStyles = (colors) => StyleSheet.create({
   },
   replyMessage: {
     alignItems: 'flex-start',
-    gap: 8,
+    gap: 10,
   },
-  scheduleMessageButton: {
-    minHeight: 34,
+  replyHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    borderRadius: 17,
-    backgroundColor: colors.surface,
+    gap: 8,
+  },
+  replyAuthor: {
+    color: colors.gold,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  replyBody: {
+    alignSelf: 'stretch',
+    gap: 8,
+    paddingLeft: 32,
+  },
+  scheduleMessageButton: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginLeft: 32,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    backgroundColor: colors.goldSoft,
   },
   scheduleMessageButtonText: {
-    color: colors.textSecondary,
+    color: colors.gold,
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   userBubble: {
     maxWidth: '85%',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 18,
-    backgroundColor: colors.surface,
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    borderRadius: 20,
+    borderBottomRightRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    backgroundColor: colors.goldSoft,
   },
   messageText: {
     color: colors.text,
     fontSize: 16,
-    lineHeight: 24,
+    lineHeight: 25,
   },
   replyPending: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
+  pendingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
+  },
   pendingText: {
     color: colors.textSecondary,
-    fontSize: 14,
+    fontSize: 13.5,
+    fontStyle: 'italic',
+  },
+  failedBox: {
+    alignSelf: 'flex-start',
+    maxWidth: '90%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.errorBorder,
+    backgroundColor: colors.errorSoft,
   },
   failedText: {
     color: colors.error,
@@ -442,7 +520,7 @@ const createStyles = (colors) => StyleSheet.create({
   },
   sendError: {
     color: colors.error,
-    fontSize: 14,
+    fontSize: 13.5,
     textAlign: 'center',
     paddingHorizontal: 16,
     paddingBottom: 8,
@@ -450,16 +528,16 @@ const createStyles = (colors) => StyleSheet.create({
   composer: {
     paddingHorizontal: 12,
     paddingTop: 6,
-    paddingBottom: 8,
-    borderRadius: 26,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.divider,
+    paddingBottom: 10,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
     backgroundColor: colors.surface,
-    shadowColor: '#000000',
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.22,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
   },
   composerWrap: {
     paddingHorizontal: 12,
@@ -478,13 +556,14 @@ const createStyles = (colors) => StyleSheet.create({
     gap: 8,
   },
   actionButton: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 18,
+    borderRadius: 19,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.divider,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceRaised,
   },
   scheduleAction: {
     height: 36,
@@ -504,33 +583,36 @@ const createStyles = (colors) => StyleSheet.create({
   composerHint: {
     color: colors.textMuted,
     fontSize: 11,
+    letterSpacing: 0.2,
     textAlign: 'center',
     paddingTop: 8,
     paddingBottom: 4,
   },
   input: {
     width: '100%',
-    minHeight: 42,
+    minHeight: 44,
     maxHeight: 140,
-    paddingHorizontal: 4,
-    paddingTop: 9,
-    paddingBottom: 9,
+    paddingHorizontal: 6,
+    paddingTop: 10,
+    paddingBottom: 10,
     color: colors.text,
     fontSize: 16,
     textAlignVertical: 'top',
+    outlineStyle: 'none',
   },
   sendButton: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 18,
+    borderRadius: 20,
+    overflow: 'hidden',
     backgroundColor: colors.primary,
   },
   sendButtonDisabled: {
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceRaised,
   },
   pressed: {
-    opacity: 0.7,
+    opacity: 0.75,
   },
 });

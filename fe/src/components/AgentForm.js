@@ -5,8 +5,10 @@ import AuthButton from '@/components/AuthButton';
 import AuthField from '@/components/AuthField';
 import { LockIcon } from '@/components/AuthIcons';
 import { AgentIcon, PluginIcon } from '@/components/HomeIcons';
+import { Eyebrow } from '@/components/Luxe';
+import { FadeIn } from '@/components/Motion';
 import { MyUserContext } from '@/config/Contexts';
-import { useThemeColors, useThemeStyles } from '@/constants/theme';
+import { fonts, useThemeColors, useThemeStyles } from '@/constants/theme';
 import {
   createAgent,
   getAgentErrorMessage,
@@ -154,6 +156,7 @@ export default function AgentForm({ onSaved, agent = null, onCancel }) {
     <View style={styles.formCard}>
       {isEditing && (
         <View style={styles.editingHeader}>
+          <Eyebrow style={styles.editingEyebrow}>Agent</Eyebrow>
           <Text style={styles.editingTitle}>Chỉnh sửa Agent</Text>
           <Text style={styles.editingSubtitle}>Cập nhật tên, domain hoặc thay đổi khóa bảo mật</Text>
         </View>
@@ -223,7 +226,9 @@ export default function AgentForm({ onSaved, agent = null, onCancel }) {
 
       {/* Modern Status Pill (Không dùng icon tick to giả tạo) */}
       {connectionStatus ? (
-        <View
+        <FadeIn
+          distance={8}
+          duration={360}
           style={[
             styles.statusPill,
             connectionStatus.ok ? styles.statusPillOk : styles.statusPillFail,
@@ -243,7 +248,7 @@ export default function AgentForm({ onSaved, agent = null, onCancel }) {
           >
             {connectionStatus.message}
           </Text>
-        </View>
+        </FadeIn>
       ) : null}
 
       <View style={styles.actions}>
@@ -276,17 +281,25 @@ const createStyles = (colors) => StyleSheet.create({
     paddingVertical: 4,
   },
   editingHeader: {
-    marginBottom: 16,
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderStrong,
+  },
+  editingEyebrow: {
+    marginBottom: 6,
   },
   editingTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontFamily: fonts.display,
+    fontSize: 22,
+    fontWeight: '600',
     color: colors.text,
   },
   editingSubtitle: {
-    fontSize: 13,
+    fontSize: 13.5,
+    lineHeight: 19,
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: 4,
   },
   actions: {
     gap: 12,
@@ -296,7 +309,14 @@ const createStyles = (colors) => StyleSheet.create({
     color: colors.error,
     fontSize: 13,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.errorBorder,
+    backgroundColor: colors.errorSoft,
+    overflow: 'hidden',
   },
   /* Modern Minimalist Status Pill */
   statusPill: {

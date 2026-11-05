@@ -4,7 +4,7 @@ import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CloseIcon, PlayIcon } from '@/components/HomeIcons';
-import { useThemeStyles } from '@/constants/theme';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
 import { isImage, isVideo } from '@/services/attachments';
 
 const VideoModal = ({ url, onClose }) => {
@@ -31,10 +31,13 @@ const VideoModal = ({ url, onClose }) => {
 };
 
 const VideoTile = ({ style, size = 28 }) => {
+  const colors = useThemeColors();
   const styles = useThemeStyles(createStyles);
   return (
     <View style={[styles.videoTile, style]}>
-      <PlayIcon size={size} />
+      <View style={[styles.playBadge, { width: size * 2, height: size * 2, borderRadius: size }]}>
+        <PlayIcon size={size * 0.75} color={colors.gold} />
+      </View>
     </View>
   );
 };
@@ -104,7 +107,7 @@ export const PendingAttachments = ({ files, onRemove }) => {
             accessibilityRole="button"
             accessibilityLabel={`Bỏ ${file.fileName}`}
           >
-            <CloseIcon size={14} />
+            <CloseIcon size={12} />
           </Pressable>
         </View>
       ))}
@@ -114,7 +117,7 @@ export const PendingAttachments = ({ files, onRemove }) => {
 
 const createStyles = (colors) => StyleSheet.create({
   pressed: {
-    opacity: 0.7,
+    opacity: 0.75,
   },
   list: {
     gap: 8,
@@ -122,19 +125,30 @@ const createStyles = (colors) => StyleSheet.create({
   media: {
     width: 220,
     height: 220,
-    borderRadius: 16,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
     backgroundColor: colors.surface,
   },
   videoTile: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceRaised,
+  },
+  playBadge: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    backgroundColor: colors.goldSoft,
   },
   fileRow: {
     maxWidth: 260,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
     backgroundColor: colors.surface,
   },
   fileName: {
@@ -142,19 +156,21 @@ const createStyles = (colors) => StyleSheet.create({
     fontSize: 14,
   },
   pending: {
-    gap: 8,
+    gap: 10,
     paddingHorizontal: 16,
     paddingTop: 10,
   },
   thumb: {
-    width: 68,
-    height: 68,
+    width: 70,
+    height: 70,
   },
   thumbMedia: {
     width: 64,
     height: 64,
-    marginTop: 4,
-    borderRadius: 12,
+    marginTop: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
     backgroundColor: colors.surface,
   },
   remove: {
@@ -166,13 +182,13 @@ const createStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 11,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.divider,
-    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceRaised,
   },
   videoPage: {
     flex: 1,
-    backgroundColor: colors.backgroundDeep,
+    backgroundColor: '#000000',
   },
   videoClose: {
     alignSelf: 'flex-end',
@@ -182,6 +198,8 @@ const createStyles = (colors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
     backgroundColor: colors.surface,
   },
   video: {

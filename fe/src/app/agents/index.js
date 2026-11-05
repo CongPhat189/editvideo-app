@@ -25,9 +25,11 @@ import {
   PluginIcon,
   TrashIcon,
 } from '@/components/HomeIcons';
+import { Ornament } from '@/components/Luxe';
+import { Breathing, FadeIn, stagger } from '@/components/Motion';
 import PageHeader from '@/components/PageHeader';
 import { MyUserContext } from '@/config/Contexts';
-import { useThemeColors, useThemeStyles } from '@/constants/theme';
+import { fonts, useThemeColors, useThemeStyles } from '@/constants/theme';
 import {
   deleteAgent,
   getAgentErrorMessage,
@@ -162,7 +164,7 @@ function AgentsContent({ menuButton }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
+      <StatusBar style={colors.statusBar} />
       <PageHeader title="Agent" left={menuButton} />
 
       <KeyboardAvoidingView
@@ -177,8 +179,8 @@ function AgentsContent({ menuButton }) {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={() => loadAgents(true)}
-              tintColor={colors.text}
-              colors={[colors.text]}
+              tintColor={colors.gold}
+              colors={[colors.gold]}
             />
           }
         >
@@ -186,46 +188,47 @@ function AgentsContent({ menuButton }) {
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
             {agents === null && !error ? (
-              <ActivityIndicator color={colors.text} style={styles.loading} />
+              <ActivityIndicator color={colors.gold} style={styles.loading} />
             ) : null}
 
             {/* Form Thêm mới / Chỉnh sửa */}
             {formOpen ? (
-              <View style={styles.formContainer}>
+              <FadeIn style={styles.formContainer} distance={18}>
                 <AgentForm
                   agent={editingAgent}
                   onSaved={handleSaved}
                   onCancel={handleCancelForm}
                 />
-              </View>
+              </FadeIn>
             ) : (
-              <View style={styles.topAction}>
+              <FadeIn style={styles.topAction}>
                 <AuthButton title="+ Thêm Agent" onPress={toggleForm} />
-              </View>
+              </FadeIn>
             )}
 
             {/* Trạng thái trống */}
             {agents?.length === 0 && !formOpen ? (
-              <View style={styles.emptyContainer}>
-                <View style={styles.emptyIconBox}>
-                  <AgentIcon size={36} color={colors.textMuted} />
-                </View>
+              <FadeIn style={styles.emptyContainer} delay={120}>
+                <Breathing style={styles.emptyIconBox} duration={3200} scaleTo={1.06}>
+                  <AgentIcon size={32} color={colors.gold} />
+                </Breathing>
                 <Text style={styles.emptyTitle}>Chưa có Agent nào</Text>
+                <Ornament width={80} style={styles.emptyOrnament} />
                 <Text style={styles.emptySubtitle}>
                   Thêm máy chủ GoClaw Agent để bắt đầu tự động hóa quy trình dựng và xuất bản video.
                 </Text>
-              </View>
+              </FadeIn>
             ) : null}
 
             {/* Danh sách Agent Cards */}
             {agents?.length > 0 ? (
               <View style={styles.list}>
-                {agents.map((agent) => {
+                {agents.map((agent, index) => {
                   const isTesting = testingId === agent.id;
                   const testStatus = testResults[agent.id];
 
                   return (
-                    <View key={agent.id} style={styles.agentCard}>
+                    <FadeIn key={agent.id} style={styles.agentCard} delay={stagger(index, 90, 120)} distance={20}>
                       {/* Header của Card */}
                       <View style={styles.cardHeader}>
                         <View style={styles.cardAvatar}>
@@ -251,7 +254,7 @@ function AgentsContent({ menuButton }) {
                             accessibilityLabel="Sửa"
                             hitSlop={8}
                           >
-                            <PencilIcon size={17} color={colors.textSecondary} />
+                            <PencilIcon size={16} color={colors.textSecondary} />
                           </Pressable>
                           <Pressable
                             style={({ pressed }) => [styles.ctrlBtn, pressed && styles.pressed]}
@@ -259,7 +262,7 @@ function AgentsContent({ menuButton }) {
                             accessibilityLabel="Xóa"
                             hitSlop={8}
                           >
-                            <TrashIcon size={17} color={colors.error} />
+                            <TrashIcon size={16} color={colors.error} />
                           </Pressable>
                         </View>
                       </View>
@@ -282,18 +285,22 @@ function AgentsContent({ menuButton }) {
 
                       {/* Trạng thái Test Kết Nối (Pill thanh lịch, không dùng icon tick to giả tạo) */}
                       {testStatus ? (
-                        <View
+                        <FadeIn
+                          distance={8}
+                          duration={360}
                           style={[
                             styles.statusPill,
                             testStatus.ok ? styles.statusPillOk : styles.statusPillFail,
                           ]}
                         >
-                          <View
-                            style={[
-                              styles.statusDot,
-                              testStatus.ok ? styles.statusDotOk : styles.statusDotFail,
-                            ]}
-                          />
+                          <Breathing duration={1600} scaleTo={1.5} opacityFrom={1} opacityTo={0.55}>
+                            <View
+                              style={[
+                                styles.statusDot,
+                                testStatus.ok ? styles.statusDotOk : styles.statusDotFail,
+                              ]}
+                            />
+                          </Breathing>
                           <Text
                             style={[
                               styles.statusText,
@@ -302,7 +309,7 @@ function AgentsContent({ menuButton }) {
                           >
                             {testStatus.message}
                           </Text>
-                        </View>
+                        </FadeIn>
                       ) : null}
 
                       {/* Nút Test kết nối của thẻ */}
@@ -316,12 +323,12 @@ function AgentsContent({ menuButton }) {
                         disabled={isTesting}
                       >
                         {isTesting ? (
-                          <ActivityIndicator size="small" color={colors.text} />
+                          <ActivityIndicator size="small" color={colors.gold} />
                         ) : (
                           <Text style={styles.testCardBtnText}>Kiểm tra kết nối</Text>
                         )}
                       </Pressable>
-                    </View>
+                    </FadeIn>
                   );
                 })}
               </View>
@@ -343,7 +350,7 @@ const createStyles = (colors) => StyleSheet.create({
   },
   content: {
     paddingHorizontal: 16,
-    paddingTop: 12,
+    paddingTop: 14,
     paddingBottom: 48,
   },
   page: {
@@ -352,102 +359,137 @@ const createStyles = (colors) => StyleSheet.create({
     alignSelf: 'center',
   },
   topAction: {
-    marginBottom: 20,
+    marginBottom: 22,
   },
   formContainer: {
-    backgroundColor: colors.surface,
-    padding: 18,
-    borderRadius: 20,
+    backgroundColor: colors.card,
+    padding: 20,
+    borderRadius: 24,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: colors.divider,
+    borderColor: colors.goldBorder,
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.16,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
   },
   loading: {
     marginVertical: 32,
   },
   error: {
     color: colors.error,
-    fontSize: 14,
+    fontSize: 13.5,
     textAlign: 'center',
     marginBottom: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.errorBorder,
+    backgroundColor: colors.errorSoft,
+    overflow: 'hidden',
   },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 48,
+    paddingVertical: 44,
     paddingHorizontal: 24,
+    borderRadius: 24,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
   },
   emptyIconBox: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: colors.surfaceRaised,
+    width: 68,
+    height: 68,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    backgroundColor: colors.goldSoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 18,
   },
   emptyTitle: {
     color: colors.text,
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 6,
+    fontFamily: fonts.display,
+    fontSize: 21,
+    fontWeight: '600',
+  },
+  emptyOrnament: {
+    marginTop: 12,
+    marginBottom: 12,
   },
   emptySubtitle: {
     color: colors.textSecondary,
-    fontSize: 13,
+    fontSize: 14,
     textAlign: 'center',
-    lineHeight: 19,
+    lineHeight: 21,
+    maxWidth: 320,
   },
   list: {
     gap: 14,
   },
   agentCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.divider,
+    backgroundColor: colors.card,
+    borderRadius: 22,
+    padding: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    shadowColor: colors.shadow,
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
   },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   cardAvatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: colors.surfaceRaised,
+    width: 46,
+    height: 46,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: colors.goldBorder,
+    backgroundColor: colors.goldSoft,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 14,
   },
   cardTitleBox: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
   cardTitle: {
     color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 16.5,
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
   domainRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   },
   domainText: {
+    flexShrink: 1,
     color: colors.textMuted,
-    fontSize: 12,
+    fontSize: 12.5,
   },
   cardControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   ctrlBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -458,44 +500,49 @@ const createStyles = (colors) => StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: colors.divider,
+    marginTop: 16,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderStrong,
   },
   keyBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: colors.surfaceRaised,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
+    gap: 6,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
   },
   keyBadgeLabel: {
     color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '500',
+    fontSize: 10.5,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
   },
   keyBadgeVal: {
     color: colors.textSecondary,
-    fontSize: 11,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    fontSize: 11.5,
+    fontFamily: fonts.mono,
   },
   testCardBtn: {
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: colors.surfaceRaised,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: colors.goldSoft,
     borderWidth: 1,
-    borderColor: colors.divider,
+    borderColor: colors.goldBorder,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 12,
+    marginTop: 14,
   },
   testCardBtnText: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '500',
+    color: colors.gold,
+    fontSize: 13.5,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   btnDisabled: {
     opacity: 0.6,
@@ -504,11 +551,11 @@ const createStyles = (colors) => StyleSheet.create({
   statusPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    paddingVertical: 8,
+    gap: 8,
+    paddingVertical: 9,
     paddingHorizontal: 12,
-    borderRadius: 10,
-    marginTop: 10,
+    borderRadius: 12,
+    marginTop: 12,
     borderWidth: 1,
   },
   statusPillOk: {
@@ -520,9 +567,9 @@ const createStyles = (colors) => StyleSheet.create({
     borderColor: colors.errorBorder,
   },
   statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
   statusDotOk: {
     backgroundColor: colors.success,
@@ -531,8 +578,9 @@ const createStyles = (colors) => StyleSheet.create({
     backgroundColor: colors.error,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: '500',
+    flexShrink: 1,
+    fontSize: 12.5,
+    fontWeight: '600',
   },
   statusTextOk: {
     color: colors.success,
