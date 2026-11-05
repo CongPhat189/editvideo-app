@@ -27,7 +27,7 @@ import {
 } from '@/components/HomeIcons';
 import PageHeader from '@/components/PageHeader';
 import { MyUserContext } from '@/config/Contexts';
-import { colors } from '@/constants/theme';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
 import {
   deleteAgent,
   getAgentErrorMessage,
@@ -44,6 +44,9 @@ export default function Agents() {
 }
 
 function AgentsContent({ menuButton }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
   const [user] = use(MyUserContext);
   const token = user?.access_token;
   const userId = user?.id;
@@ -159,7 +162,7 @@ function AgentsContent({ menuButton }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
       <PageHeader title="Agent" left={menuButton} />
 
       <KeyboardAvoidingView
@@ -330,7 +333,7 @@ function AgentsContent({ menuButton }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -378,7 +381,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: colors.surfaceRaised,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
@@ -413,7 +416,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: colors.surfaceRaised,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -464,7 +467,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: colors.surfaceRaised,
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 6,
@@ -482,7 +485,7 @@ const styles = StyleSheet.create({
   testCardBtn: {
     height: 36,
     borderRadius: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.divider,
     alignItems: 'center',
@@ -509,12 +512,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   statusPillOk: {
-    backgroundColor: 'rgba(52, 211, 153, 0.08)',
-    borderColor: 'rgba(52, 211, 153, 0.22)',
+    backgroundColor: colors.successSoft,
+    borderColor: colors.successBorder,
   },
   statusPillFail: {
-    backgroundColor: 'rgba(248, 113, 113, 0.08)',
-    borderColor: 'rgba(248, 113, 113, 0.22)',
+    backgroundColor: colors.errorSoft,
+    borderColor: colors.errorBorder,
   },
   statusDot: {
     width: 6,

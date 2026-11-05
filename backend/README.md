@@ -189,9 +189,9 @@ Mở http://localhost:4000/docs để thử API. Các API mobile (trừ `/health
 | `GET/POST /conversations` | danh sách (ghim trước, mới nhất trước) / tạo mới |
 | `GET/PATCH/DELETE /conversations/{id}` | xem, đổi tên, ghim, lưu trữ, xóa mềm |
 | `GET /conversations/{id}/messages?before=&limit=` | tin nhắn, mới nhất trước, phân trang theo `next_before` |
-| `POST /conversations/{id}/messages` | gửi tin `{content, idempotency_key?}`, chờ agent trả lời |
+| `POST /conversations/{id}/messages` | gửi tin `{content, response_mode?, idempotency_key?}`, chờ agent trả lời; dùng `response_mode: "content_only"` khi gọi từ thao tác tạo content |
 | `POST /conversations/{id}/messages/upload` | gửi tin kèm ảnh, video, file (`multipart/form-data`: `files`, `content?`, `idempotency_key?`) |
-| `POST /schedules` | đặt lịch trong cuộc trò chuyện `{conversation_id, scheduled_at, platforms?, content?, timezone?, task_name?}` |
+| `POST /schedules` | đặt lịch trong cuộc trò chuyện `{conversation_id, scheduled_at, platforms?, content_message_id?, content?, timezone?, task_name?}`; gửi `content_message_id` để lấy chính nội dung của phản hồi assistant đã chọn làm nội dung lịch |
 | `GET /schedules?status=` · `GET /schedules/{id}` | xem lịch và kết quả |
 | `DELETE /schedules/{id}` | hủy lịch chưa gửi |
 | `GET /search?q=` | tìm không dấu trong lịch sử chat |
@@ -205,12 +205,13 @@ Gửi file: tối đa 5 file mỗi tin, mỗi file 50 MB. File lưu ở bucket r
 `POST /v1/media/upload` và WebSocket `chat.send` của GoClaw, cùng session với tin chữ nên agent vẫn nhớ ngữ cảnh.
 
 Đặt lịch: `scheduled_at` nhận `05/11/2026 20:00`, `2026-11-05T20:00` hoặc chỉ ngày; không kèm múi giờ thì hiểu theo `timezone`
-(mặc định `Asia/Ho_Chi_Minh`). Lịch luôn gắn với một cuộc trò chuyện. Không có `content` thì lưu lịch và gửi ngay trong nền tin
-`hẹn lịch đăng vào 05/11/2026 20:00` vào cuộc trò chuyện đó (chậm tối đa một chu kỳ `SCHEDULE_POLL_SECONDS`). Tin này có
-`metadata.hidden` nên không hiện trong khung chat và tìm kiếm, câu trả lời của agent thì vẫn hiện.
+(mặc định `Asia/Ho_Chi_Minh`). Lịch luôn gắn với một cuộc trò chuyện. Khi tạo lịch, backend lưu nội dung/ảnh và giờ, đồng thời
+xếp một request ẩn cho agent xác nhận thời gian và nền tảng, không yêu cầu người dùng xác nhận lại. Đến giờ (chậm tối đa một chu kỳ
+`SCHEDULE_POLL_SECONDS`), worker gửi lệnh đăng cho agent. Nếu truyền
+`content_message_id`, backend lấy nguyên văn nội dung assistant và ảnh đính kèm của tin nhắn gốc (nếu có), gửi ảnh cùng lệnh đăng.
 `platforms` nhận một hoặc nhiều trong Facebook, YouTube, TikTok, Instagram, Website; có thì tin thành
 `hẹn lịch đăng lên Facebook, TikTok vào 05/11/2026 20:00`.
-Có `content` thì đến giờ, worker trong tiến trình API gửi tin (`app/services/schedule_worker.py`), tin và câu trả lời nằm trong cuộc trò chuyện đã chọn. Worker chỉ
+Có `content` thì đến giờ, worker trong tiến trình API gửi lệnh đăng (`app/services/schedule_worker.py`), lệnh được ẩn khỏi lịch sử chat. Worker chỉ
 tự gửi lại khi chắc chắn GoClaw chưa nhận tin (không kết nối được, `429`, `503`) hoặc cuộc trò chuyện đang bận, tối đa 3 lần.
 Hết giờ chờ hay server dừng giữa chừng thì báo `failed`, không gửi lại, vì agent có thể đã làm xong (ví dụ đăng bài).
 

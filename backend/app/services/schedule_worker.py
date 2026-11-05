@@ -7,6 +7,7 @@ Agent có thể đăng bài thật, nên hết giờ chờ hay worker chết gi�
 """
 
 import asyncio
+from io import BytesIO
 import os
 import socket
 import uuid
@@ -17,7 +18,7 @@ from sqlalchemy import and_, func, or_, select, update
 from app.core.config import get_settings
 from app.core.logging import logger
 from app.db.supabase import get_sessionmaker
-from app.integrations import goclaw
+from app.integrations import goclaw, supabase_storage
 from app.models import Agent, AppUser, Conversation, ScheduledTask, ScheduledTaskLog
 from app.services import chat_service
 
@@ -98,7 +99,7 @@ async def claim_due(limit: int) -> list[uuid.UUID]:
     return list(ids)
 
 
-async def _deliver(session, *, conversation_id, user_id, content, key, hidden) -> dict:
+async def _deliver(session, *, conversation_id, user_id, content, key, hidden, media=None) -> dict:
     conv = None
     if conversation_id is not None:
         conv = await session.scalar(
@@ -119,7 +120,14 @@ async def _deliver(session, *, conversation_id, user_id, content, key, hidden) -
     await chat_service.close_stale_replies(session, conv.id)
     try:
         sent = await chat_service.send_to_agent(
-            session, conv, target, user_id=user_id, content=content, idempotency_key=key, hidden=hidden
+            session,
+            conv,
+            target,
+            user_id=user_id,
+            content=content,
+            idempotency_key=key,
+            hidden=hidden,
+            media=media,
         )
     except chat_service.ReplyInFlight:
         raise _TaskFailed("Agent đang trả lời tin trước trong cuộc trò chuyện", retryable=True)
@@ -136,8 +144,8 @@ async def run_task(task_id: uuid.UUID) -> None:
         # Lưu ra biến: sau rollback các object bị hết hạn
         attempt, max_attempts = task.attempts, task.max_attempts
         conversation_id, user_id = task.conversation_id, task.user_id
-        content = task.payload.get("content")
-        hidden = task.payload.get("kind") == NOTICE_KIND
+        content = task.payload.get("agent_instruction") or task.payload.get("content")
+        hidden = task.payload.get("kind") == NOTICE_KIND or "agent_instruction" in task.payload
         session.add(
             ScheduledTaskLog(
                 task_id=task_id,
@@ -153,6 +161,21 @@ async def run_task(task_id: uuid.UUID) -> None:
         try:
             if not content:
                 raise _TaskFailed("Lịch không có nội dung tin nhắn")
+            media = []
+            for item in task.payload.get("media", []):
+                try:
+                    file_path = item["file_path"]
+                    file_name = item["file_name"]
+                    mime_type = item["mime_type"]
+                except (KeyError, TypeError):
+                    raise _TaskFailed("Thông tin ảnh đính kèm của lịch không hợp lệ") from None
+                try:
+                    file_data = await supabase_storage.download(file_path)
+                except supabase_storage.StorageError as e:
+                    raise _TaskFailed(str(e)) from e
+                if not file_data:
+                    raise _TaskFailed(f"Ảnh đính kèm {file_name} đang trống")
+                media.append(goclaw.GoClawMedia(file_name, mime_type, BytesIO(file_data)))
             response = await _deliver(
                 session,
                 conversation_id=conversation_id,
@@ -160,6 +183,7 @@ async def run_task(task_id: uuid.UUID) -> None:
                 content=content,
                 key=uuid.uuid5(_KEY_NAMESPACE, f"{task_id}:{attempt}"),
                 hidden=hidden,
+                media=media,
             )
         except (_TaskFailed, goclaw.GoClawError) as e:
             error, retryable = str(e), getattr(e, "retryable", False)

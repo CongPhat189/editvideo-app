@@ -21,12 +21,13 @@ export const getSchedules = async (token) => {
   return schedules;
 };
 
-// Không gửi content: backend lưu lịch và báo ngay cho agent "hẹn lịch đăng lên ... vào ..."
-export const createSchedule = async (token, { projectId, platforms, time }) => {
+export const createSchedule = async (token, { projectId, contentMessageId, platforms, scheduledAt, timezone }) => {
   const res = await authApis(token).post(endpoints.schedules, {
     conversation_id: projectId,
+    content_message_id: contentMessageId,
     platforms,
-    scheduled_at: time,
+    scheduled_at: scheduledAt,
+    timezone,
   });
   return res.data;
 };

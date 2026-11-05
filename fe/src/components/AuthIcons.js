@@ -1,21 +1,24 @@
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
-import { colors } from '@/constants/theme';
+import { useThemeColors } from '@/constants/theme';
 
-export const Icon = ({ children, color = colors.textMuted, size = 20 }) => (
-  <Svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke={color}
-    strokeWidth={1.75}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    {children}
-  </Svg>
-);
+export const Icon = ({ children, color, size = 20 }) => {
+  const colors = useThemeColors();
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color ?? colors.textMuted}
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {children}
+    </Svg>
+  );
+};
 
 export const PhoneIcon = (props) => (
   <Icon {...props}>

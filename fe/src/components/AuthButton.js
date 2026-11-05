@@ -1,8 +1,11 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
 
-import { colors } from '@/constants/theme';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
 
 export default function AuthButton({ title, onPress, loading = false, variant = 'primary' }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
   const isPrimary = variant === 'primary';
 
   return (
@@ -26,7 +29,7 @@ export default function AuthButton({ title, onPress, loading = false, variant = 
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   button: {
     height: 46,
     alignItems: 'center',

@@ -1,8 +1,11 @@
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { colors } from '@/constants/theme';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
 
 export default function AuthField({ label, icon, error, ref, ...inputProps }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -22,7 +25,7 @@ export default function AuthField({ label, icon, error, ref, ...inputProps }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   field: {
     marginBottom: 24,
   },

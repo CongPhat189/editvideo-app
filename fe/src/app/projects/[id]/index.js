@@ -16,10 +16,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MessageAttachments, PendingAttachments } from '@/components/ChatAttachments';
 import DrawerScreen from '@/components/DrawerScreen';
-import { CalendarIcon, PlusIcon, SendIcon } from '@/components/HomeIcons';
+import { AgentIcon, CalendarIcon, MicIcon, PlusIcon, SendIcon } from '@/components/HomeIcons';
 import PageHeader from '@/components/PageHeader';
 import { MyUserContext } from '@/config/Contexts';
-import { colors } from '@/constants/theme';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
 import { MAX_FILES, pickMedia } from '@/services/attachments';
 import { getErrorMessage } from '@/services/auth';
 import {
@@ -34,7 +34,10 @@ const POLL_INTERVAL = 3000;
 const MAX_MESSAGE_LENGTH = 20000;
 const IN_PROGRESS = ['pending', 'processing'];
 
-const MessageBubble = ({ message }) => {
+const MessageBubble = ({ message, showScheduleButton, onLongPress, onSchedule }) => {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
   const attachments = message.attachments ?? [];
   if (message.role === 'user') {
     return (
@@ -59,10 +62,30 @@ const MessageBubble = ({ message }) => {
   if (message.status === 'failed') {
     return <Text style={styles.failedText}>{message.error_message || 'Agent không trả lời được'}</Text>;
   }
+  const canSchedule = Boolean(message.content?.trim() || attachments.length > 0);
   return (
     <View style={styles.replyMessage}>
-      {attachments.length > 0 ? <MessageAttachments attachments={attachments} /> : null}
-      {message.content ? <Text style={styles.messageText} selectable>{message.content}</Text> : null}
+      <Pressable
+        onLongPress={onLongPress}
+        delayLongPress={350}
+        disabled={message.status !== 'completed' || !canSchedule}
+        accessibilityRole="button"
+        accessibilityLabel="Nhấn giữ để đặt lịch tin nhắn này"
+      >
+        {attachments.length > 0 ? <MessageAttachments attachments={attachments} /> : null}
+        {message.content ? <Text style={styles.messageText}>{message.content}</Text> : null}
+      </Pressable>
+      {showScheduleButton ? (
+        <Pressable
+          onPress={onSchedule}
+          style={({ pressed }) => [styles.scheduleMessageButton, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Đặt lịch nội dung này"
+        >
+          <CalendarIcon size={15} color={colors.textSecondary} />
+          <Text style={styles.scheduleMessageButtonText}>Đặt lịch</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 };
@@ -78,6 +101,9 @@ export default function ProjectChat() {
 }
 
 function ChatContent({ id, menuButton }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
   const [user] = use(MyUserContext);
   const token = user?.access_token;
   const [project, setProject] = useState(null);
@@ -89,7 +115,9 @@ function ChatContent({ id, menuButton }) {
   const [files, setFiles] = useState([]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
+  const [scheduleActionMessageId, setScheduleActionMessageId] = useState(null);
   const loadingOlder = useRef(false);
+  const inputRef = useRef(null);
 
   const loadMessages = useCallback(async () => {
     const page = await getMessages(token, id);
@@ -206,7 +234,7 @@ function ChatContent({ id, menuButton }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
       <PageHeader title={project?.title || ''} left={menuButton} />
       <KeyboardAvoidingView
         style={styles.flex}
@@ -224,7 +252,11 @@ function ChatContent({ id, menuButton }) {
         ) : null}
         {!loading && !loadError && messages.length === 0 ? (
           <View style={styles.center}>
-            <Text style={styles.emptyText}>Hãy gửi tin nhắn đầu tiên cho dự án này</Text>
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}><AgentIcon size={24} /></View>
+              <Text style={styles.emptyTitle}>Bắt đầu cuộc trò chuyện</Text>
+              <Text style={styles.emptyText}>Mô tả video bạn muốn tạo. Bạn cũng có thể gửi ảnh hoặc video để Agent tham khảo.</Text>
+            </View>
           </View>
         ) : null}
         {!loading && !loadError && messages.length > 0 ? (
@@ -233,7 +265,17 @@ function ChatContent({ id, menuButton }) {
             inverted
             data={messages}
             keyExtractor={(message) => message.id}
-            renderItem={({ item }) => <MessageBubble message={item} />}
+            renderItem={({ item }) => (
+              <MessageBubble
+                message={item}
+                showScheduleButton={String(scheduleActionMessageId) === String(item.id)}
+                onLongPress={() => setScheduleActionMessageId(item.id)}
+                onSchedule={() => router.push({
+                  pathname: '/projects/[id]/schedule',
+                  params: { id, contentMessageId: item.id },
+                })}
+              />
+            )}
             contentContainerStyle={styles.messages}
             onEndReached={loadOlder}
             onEndReachedThreshold={0.3}
@@ -250,55 +292,61 @@ function ChatContent({ id, menuButton }) {
             />
           </View>
         ) : null}
-        <View style={styles.composer}>
-          <Pressable
-            onPress={handlePickFiles}
-            style={({ pressed }) => [styles.scheduleButton, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Thêm ảnh hoặc video"
-          >
-            <PlusIcon size={22} />
-          </Pressable>
-          <Pressable
-            onPress={() => router.push(`/projects/${id}/schedule`)}
-            style={({ pressed }) => [styles.scheduleButton, pressed && styles.pressed]}
-            accessibilityRole="button"
-            accessibilityLabel="Đặt lịch"
-          >
-            <CalendarIcon size={22} />
-          </Pressable>
-          <TextInput
-            style={styles.input}
-            value={text}
-            onChangeText={setText}
-            placeholder="Nhập tin nhắn"
-            placeholderTextColor={colors.textMuted}
-            selectionColor={colors.primary}
-            accessibilityLabel="Nhập tin nhắn"
-            maxLength={MAX_MESSAGE_LENGTH}
-            multiline
-          />
-          <Pressable
-            onPress={handleSend}
-            disabled={!canSend}
-            style={({ pressed }) => [
-              styles.sendButton,
-              !canSend && styles.sendButtonDisabled,
-              pressed && styles.pressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Gửi"
-            accessibilityState={{ disabled: !canSend }}
-          >
-            <SendIcon size={22} color={canSend ? colors.onPrimary : colors.textMuted} />
-          </Pressable>
+        <View style={styles.composerWrap}>
+          <View style={styles.composer}>
+            <TextInput
+              ref={inputRef}
+              style={styles.input}
+              value={text}
+              onChangeText={setText}
+              placeholder="Nhập tin nhắn"
+              placeholderTextColor={colors.textMuted}
+              selectionColor={colors.primary}
+              accessibilityLabel="Nhập tin nhắn"
+              maxLength={MAX_MESSAGE_LENGTH}
+              multiline
+            />
+            <View style={styles.composerToolbar}>
+              <View style={styles.composerActions}>
+                <Pressable
+                  onPress={handlePickFiles}
+                  style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Thêm ảnh hoặc video"
+                >
+                  <PlusIcon size={20} />
+                </Pressable>
+                <Pressable
+                  onPress={() => inputRef.current?.focus()}
+                  disabled={sending}
+                  style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Mở bàn phím để nhập bằng giọng nói"
+                  accessibilityState={{ disabled: sending }}
+                >
+                  <MicIcon size={20} />
+                </Pressable>
+              </View>
+              <Pressable
+                onPress={handleSend}
+                disabled={!canSend}
+                style={({ pressed }) => [styles.sendButton, !canSend && styles.sendButtonDisabled, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Gửi"
+                accessibilityState={{ disabled: !canSend }}
+              >
+                <SendIcon size={21} color={canSend ? colors.onPrimary : colors.textMuted} />
+              </Pressable>
+            </View>
+          </View>
+          <Text style={styles.composerHint}>AI có thể mắc lỗi. Hãy kiểm tra lại thông tin quan trọng.</Text>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -312,9 +360,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
+  emptyState: {
+    alignItems: 'center',
+    maxWidth: 340,
+  },
+  emptyIcon: {
+    width: 52,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
   emptyText: {
     color: colors.textSecondary,
-    fontSize: 16,
+    fontSize: 14,
+    lineHeight: 21,
     textAlign: 'center',
   },
   messages: {
@@ -329,6 +398,20 @@ const styles = StyleSheet.create({
   replyMessage: {
     alignItems: 'flex-start',
     gap: 8,
+  },
+  scheduleMessageButton: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    borderRadius: 17,
+    backgroundColor: colors.surface,
+  },
+  scheduleMessageButtonText: {
+    color: colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
   },
   userBubble: {
     maxWidth: '85%',
@@ -365,40 +448,83 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   composer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  scheduleButton: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 22,
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 8,
+    borderRadius: 26,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.divider,
     backgroundColor: colors.surface,
+    shadowColor: '#000000',
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
-  input: {
-    flex: 1,
-    minHeight: 44,
-    maxHeight: 120,
-    paddingHorizontal: 16,
-    paddingTop: 11,
-    paddingBottom: 11,
-    borderRadius: 22,
-    color: colors.text,
-    fontSize: 16,
-    backgroundColor: colors.surface,
+  composerWrap: {
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 2,
   },
-  sendButton: {
-    width: 44,
-    height: 44,
+  composerToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  composerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  actionButton: {
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 22,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.divider,
+  },
+  scheduleAction: {
+    height: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 11,
+    borderRadius: 18,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.divider,
+  },
+  scheduleLabel: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  composerHint: {
+    color: colors.textMuted,
+    fontSize: 11,
+    textAlign: 'center',
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  input: {
+    width: '100%',
+    minHeight: 42,
+    maxHeight: 140,
+    paddingHorizontal: 4,
+    paddingTop: 9,
+    paddingBottom: 9,
+    color: colors.text,
+    fontSize: 16,
+    textAlignVertical: 'top',
+  },
+  sendButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
     backgroundColor: colors.primary,
   },
   sendButtonDisabled: {

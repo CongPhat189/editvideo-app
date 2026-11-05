@@ -1,12 +1,13 @@
 import { Circle, Path, Rect } from 'react-native-svg';
 
 import { Icon } from '@/components/AuthIcons';
-import { colors } from '@/constants/theme';
+import { useThemeColors } from '@/constants/theme';
 
 const createIcon = (shapes) => {
-  const HomeIcon = ({ color = colors.text, size = 24 }) => (
-    <Icon color={color} size={size}>{shapes}</Icon>
-  );
+  const HomeIcon = ({ color, size = 24 }) => {
+  const colors = useThemeColors();
+    return <Icon color={color ?? colors.text} size={size}>{shapes}</Icon>;
+  };
   return HomeIcon;
 };
 
@@ -19,6 +20,15 @@ export const BackIcon = createIcon(<Path d="m15 18-6-6 6-6" />);
 export const SendIcon = createIcon(<Path d="M12 19V5M5 12l7-7 7 7" />);
 
 export const PlusIcon = createIcon(<Path d="M5 12h14M12 5v14" />);
+
+export const MicIcon = createIcon(
+  <>
+    <Rect x={9} y={3} width={6} height={12} rx={3} />
+    <Path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
+  </>
+);
+
+export const StopIcon = createIcon(<Rect x={6} y={6} width={12} height={12} rx={2} />);
 
 export const PlayIcon = createIcon(
   <Path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
@@ -73,6 +83,20 @@ export const SettingsIcon = createIcon(
   <>
     <Path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
     <Circle cx={12} cy={12} r={3} />
+  </>
+);
+
+export const ProfileIcon = createIcon(
+  <>
+    <Circle cx={12} cy={8} r={4} />
+    <Path d="M5 21a7 7 0 0 1 14 0" />
+  </>
+);
+
+export const LogoutIcon = createIcon(
+  <>
+    <Path d="M10 17l5-5-5-5M15 12H3" />
+    <Path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" />
   </>
 );
 

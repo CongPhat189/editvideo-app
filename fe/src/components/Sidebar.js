@@ -7,16 +7,19 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import {
   AgentIcon,
   ChatIcon,
+  ChevronRightIcon,
   ClockIcon,
-  FolderIcon,
   MoreIcon,
+  PencilIcon,
+  ProfileIcon,
+  LogoutIcon,
   SettingsIcon,
 } from '@/components/HomeIcons';
 import { MyUserContext } from '@/config/Contexts';
-import { colors } from '@/constants/theme';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
 import { getProjects, getRecentProjectIds } from '@/services/projects';
 
-const FOOTER_HEIGHT = 48;
+const FOOTER_HEIGHT = 58;
 const FOOTER_GAP = 12;
 const FADE_HEIGHT = 96;
 const UNTITLED = 'Cuộc trò chuyện chưa đặt tên';
@@ -26,31 +29,38 @@ let cache = { token: null, projects: [], recentIds: [] };
 
 // Không có href: chỉ đóng Sidebar
 const NAV_ITEMS = [
-  { key: 'projects', label: 'Dự án', Icon: FolderIcon, href: '/projects/new' },
+  { key: 'projects', label: 'Cuộc trò chuyện mới', Icon: PencilIcon, href: '/projects/new' },
   { key: 'scheduled', label: 'Đã lên lịch', Icon: ClockIcon, href: '/scheduled' },
   { key: 'agents', label: 'Agent', Icon: AgentIcon, href: '/agents' },
   { key: 'more', label: 'Thêm', Icon: MoreIcon },
 ];
 
-const Row = ({ label, Icon, onPress }) => (
-  <Pressable
-    onPress={onPress}
-    style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-    accessibilityRole="button"
-    accessibilityLabel={label}
-  >
-    {Icon ? <Icon /> : null}
-    <Text style={styles.rowLabel} numberOfLines={1}>{label}</Text>
-  </Pressable>
-);
+const Row = ({ label, Icon, onPress }) => {
+  const styles = useThemeStyles(createStyles);
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      {Icon ? <Icon /> : null}
+      <Text style={styles.rowLabel} numberOfLines={1}>{label}</Text>
+    </Pressable>
+  );
+};
 
 export default function Sidebar({ onClose, onNavigate }) {
-  const [user] = use(MyUserContext);
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
+  const [user, dispatch] = use(MyUserContext);
   const insets = useSafeAreaInsets();
   const token = user?.access_token;
   const cached = cache.token === token ? cache : { projects: [], recentIds: [] };
   const [projects, setProjects] = useState(cached.projects);
   const [recentIds, setRecentIds] = useState(cached.recentIds);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -76,9 +86,17 @@ export default function Sidebar({ onClose, onNavigate }) {
   const footerSpace = insets.bottom + FOOTER_GAP;
 
   const openPage = (href) => {
+    setAccountMenuOpen(false);
     if (href) onNavigate(href);
     else onClose();
   };
+
+  const logout = () => {
+    setAccountMenuOpen(false);
+    dispatch({ type: 'LOGOUT' });
+    router.replace('/login');
+  };
+  const initials = (user?.full_name || 'U').trim().split(/\s+/).map((part) => part[0]).slice(-2).join('').toUpperCase();
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left']}>
@@ -126,21 +144,57 @@ export default function Sidebar({ onClose, onNavigate }) {
         <Rect width="100%" height="100%" fill="url(#sidebarFade)" />
       </Svg>
 
+      {accountMenuOpen ? (
+        <>
+          <Pressable
+            style={styles.menuBackdrop}
+            onPress={() => setAccountMenuOpen(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Đóng menu tài khoản"
+          />
+          <View style={[styles.accountMenu, { bottom: footerSpace + FOOTER_HEIGHT + 8 }]}>
+            <Pressable
+              onPress={() => openPage('/profile')}
+              style={({ pressed }) => [styles.accountSummary, pressed && styles.pressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Mở hồ sơ"
+            >
+              <View style={styles.avatar}><Text style={styles.avatarText}>{initials}</Text></View>
+              <View style={styles.accountCopy}>
+                <Text style={styles.accountName} numberOfLines={1}>{user?.full_name || 'Tài khoản'}</Text>
+                <Text style={styles.accountPlan}>Free</Text>
+              </View>
+              <ChevronRightIcon size={18} color={colors.textSecondary} />
+            </Pressable>
+            <View style={styles.menuDivider} />
+            <Row label="Hồ sơ" Icon={ProfileIcon} onPress={() => openPage('/profile')} />
+            <Row label="Cài đặt" Icon={SettingsIcon} onPress={() => openPage('/settings')} />
+            <View style={styles.menuDivider} />
+            <Row label="Đăng xuất" Icon={LogoutIcon} onPress={logout} />
+          </View>
+        </>
+      ) : null}
+
       <View style={[styles.footer, { bottom: footerSpace }]}>
         <Pressable
-          onPress={() => router.push('/settings')}
-          style={({ pressed }) => [styles.settingsButton, pressed && styles.pressed]}
+          onPress={() => setAccountMenuOpen((open) => !open)}
+          style={({ pressed }) => [styles.accountButton, accountMenuOpen && styles.accountButtonOpen, pressed && styles.pressed]}
           accessibilityRole="button"
-          accessibilityLabel="Cài đặt"
+          accessibilityLabel="Tài khoản"
+          accessibilityState={{ expanded: accountMenuOpen }}
         >
-          <SettingsIcon />
+          <View style={styles.avatar}><Text style={styles.avatarText}>{initials}</Text></View>
+          <View style={styles.accountCopy}>
+            <Text style={styles.accountName} numberOfLines={1}>{user?.full_name || 'Tài khoản'}</Text>
+            <Text style={styles.accountPlan}>Free</Text>
+          </View>
         </Pressable>
       </View>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.backgroundDeep,
@@ -195,17 +249,81 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 24,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
-  settingsButton: {
-    width: FOOTER_HEIGHT,
-    height: FOOTER_HEIGHT,
+  accountButton: {
+    minHeight: 58,
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+  },
+  accountButtonOpen: {
+    backgroundColor: colors.surfaceRaised,
+  },
+  avatar: {
+    width: 24,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: FOOTER_HEIGHT / 2,
+    borderRadius: 12,
+    backgroundColor: colors.avatar,
+  },
+  avatarText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  accountCopy: {
+    flex: 1,
+  },
+  accountName: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  accountPlan: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginTop: 1,
+  },
+  menuBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2,
+  },
+  accountMenu: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    zIndex: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderRadius: 18,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.divider,
-    backgroundColor: colors.background,
+    backgroundColor: colors.backgroundDeep,
+    shadowColor: '#000000',
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 8,
+  },
+  accountSummary: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+  },
+  menuDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.divider,
+    marginVertical: 7,
+    marginHorizontal: 8,
   },
 });

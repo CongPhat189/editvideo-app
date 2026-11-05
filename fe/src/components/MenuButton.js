@@ -1,9 +1,11 @@
 import { Pressable, StyleSheet } from 'react-native';
 
 import { MenuIcon } from '@/components/HomeIcons';
-import { colors } from '@/constants/theme';
+import { useThemeStyles } from '@/constants/theme';
 
 export default function MenuButton({ expanded, onPress }) {
+  const styles = useThemeStyles(createStyles);
+
   return (
     <Pressable
       onPress={onPress}
@@ -18,7 +20,7 @@ export default function MenuButton({ expanded, onPress }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   button: {
     width: 44,
     height: 44,
