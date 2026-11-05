@@ -163,6 +163,8 @@ class MessagePage(BaseModel):
 
 class SendMessage(BaseModel):
     content: Content
+    # Set by the dedicated create-content action. Ordinary chat stays unchanged.
+    response_mode: Literal["chat", "content_only"] = "chat"
     # Không gửi thì server tự sinh, mỗi request là một tin mới.
     # App muốn chống gửi trùng (mất mạng, bấm 2 lần) thì tự sinh key và gửi lại đúng key đó.
     idempotency_key: uuid.UUID = Field(default_factory=uuid.uuid4)

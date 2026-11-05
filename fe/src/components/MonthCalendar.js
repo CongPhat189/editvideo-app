@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { BackIcon, ChevronRightIcon } from '@/components/HomeIcons';
-import { colors } from '@/constants/theme';
+import { useThemeStyles } from '@/constants/theme';
 
 const WEEKDAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
@@ -19,6 +19,8 @@ const buildCells = (year, month) => {
 };
 
 export default function MonthCalendar({ year, month, selectedKey, minKey, markedKeys, onSelectDay, onChangeMonth }) {
+  const styles = useThemeStyles(createStyles);
+
   const todayKey = toDayKey(new Date());
   const cells = buildCells(year, month);
 
@@ -79,7 +81,7 @@ export default function MonthCalendar({ year, month, selectedKey, minKey, marked
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   monthRow: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 
-import { colors } from '@/constants/theme';
+import { useThemeStyles } from '@/constants/theme';
 import useReducedMotion from '@/hooks/useReducedMotion';
 
 const OPEN_DURATION = 280;
@@ -20,6 +20,8 @@ const WIDTH_RATIO = 0.76;
 const CONTENT_RADIUS = 36;
 
 export default function PushDrawer({ open, onClose, drawer, children }) {
+  const styles = useThemeStyles(createStyles);
+
   const { width } = useWindowDimensions();
   const drawerWidth = Math.min(width * WIDTH_RATIO, MAX_WIDTH);
   const reducedMotion = useReducedMotion();
@@ -86,7 +88,7 @@ export default function PushDrawer({ open, onClose, drawer, children }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   root: {
     flex: 1,
     overflow: 'hidden',

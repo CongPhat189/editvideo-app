@@ -2,12 +2,15 @@ import { StatusBar } from 'expo-status-bar';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors } from '@/constants/theme';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
 
 export default function AuthScreen({ title, subtitle, footer, children }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="light" />
+      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -32,7 +35,7 @@ export default function AuthScreen({ title, subtitle, footer, children }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: colors.background,

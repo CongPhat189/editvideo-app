@@ -6,7 +6,7 @@ import AuthField from '@/components/AuthField';
 import { LockIcon } from '@/components/AuthIcons';
 import { AgentIcon, PluginIcon } from '@/components/HomeIcons';
 import { MyUserContext } from '@/config/Contexts';
-import { colors } from '@/constants/theme';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
 import {
   createAgent,
   getAgentErrorMessage,
@@ -20,6 +20,9 @@ const MAX_DOMAIN_LENGTH = 255;
 const DOMAIN_FORMAT = /^https?:\/\/[^\s/]+\.?[^\s]*$/i;
 
 export default function AgentForm({ onSaved, agent = null, onCancel }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
   const [user] = use(MyUserContext);
   const isEditing = !!agent;
 
@@ -268,7 +271,7 @@ export default function AgentForm({ onSaved, agent = null, onCancel }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   formCard: {
     paddingVertical: 4,
   },
@@ -308,12 +311,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   statusPillOk: {
-    backgroundColor: 'rgba(52, 211, 153, 0.08)',
-    borderColor: 'rgba(52, 211, 153, 0.25)',
+    backgroundColor: colors.successSoft,
+    borderColor: colors.successBorder,
   },
   statusPillFail: {
-    backgroundColor: 'rgba(248, 113, 113, 0.08)',
-    borderColor: 'rgba(248, 113, 113, 0.25)',
+    backgroundColor: colors.errorSoft,
+    borderColor: colors.errorBorder,
   },
   statusDot: {
     width: 7,

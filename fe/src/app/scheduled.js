@@ -5,21 +5,47 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import DrawerScreen from '@/components/DrawerScreen';
+import { MessageAttachments } from '@/components/ChatAttachments';
 import { ChevronRightIcon } from '@/components/HomeIcons';
 import MonthCalendar, { toDayKey } from '@/components/MonthCalendar';
 import PageHeader from '@/components/PageHeader';
 import { MyUserContext } from '@/config/Contexts';
-import { colors } from '@/constants/theme';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
 import { getErrorMessage } from '@/services/auth';
 import { getProjects } from '@/services/projects';
 import { formatScheduleTime, getScheduleDayKey, getSchedules } from '@/services/schedules';
 
-const DetailRow = ({ label, value }) => (
-  <View style={styles.detailRow}>
-    <Text style={styles.detailLabel}>{label}</Text>
-    <Text style={styles.detailValue} selectable>{value}</Text>
-  </View>
-);
+const DetailRow = ({ label, value }) => {
+  const styles = useThemeStyles(createStyles);
+  return (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue} selectable>{value}</Text>
+    </View>
+  );
+};
+
+const getScheduleAttachments = (schedule) => {
+  const attachments = schedule.attachments ?? schedule.media ?? schedule.files;
+  if (Array.isArray(attachments)) {
+    return attachments.map((file, index) => ({
+      ...file,
+      id: file.id ?? `${schedule.id}-attachment-${index}`,
+      url: file.url ?? file.uri ?? file.image_url,
+      mime_type: file.mime_type ?? file.mimeType ?? 'image/jpeg',
+      file_name: file.file_name ?? file.fileName ?? `Ảnh ${index + 1}`,
+    }));
+  }
+
+  const imageUrls = schedule.image_urls ?? schedule.images ?? (schedule.image_url ? [schedule.image_url] : []);
+  if (!Array.isArray(imageUrls)) return [];
+  return imageUrls.map((image, index) => ({
+    id: `${schedule.id}-image-${index}`,
+    url: typeof image === 'string' ? image : image.url ?? image.uri,
+    mime_type: typeof image === 'object' ? image.mime_type ?? image.mimeType ?? 'image/jpeg' : 'image/jpeg',
+    file_name: typeof image === 'object' ? image.file_name ?? image.fileName ?? `Ảnh ${index + 1}` : `Ảnh ${index + 1}`,
+  })).filter((image) => image.url);
+};
 
 export default function Scheduled() {
   return (
@@ -30,6 +56,9 @@ export default function Scheduled() {
 }
 
 function ScheduledContent({ menuButton }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
   const [user] = use(MyUserContext);
   const token = user?.access_token;
   const [view, setView] = useState(() => {
@@ -73,6 +102,7 @@ function ScheduledContent({ menuButton }) {
     [schedules, selectedKey]
   );
   const selected = daySchedules.find((schedule) => schedule.id === selectedId);
+  const selectedAttachments = selected ? getScheduleAttachments(selected) : [];
 
   const changeMonth = (delta) => {
     setView(({ year, month }) => {
@@ -90,7 +120,7 @@ function ScheduledContent({ menuButton }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
       <PageHeader title="Đã lên lịch" left={menuButton} />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.page}>
@@ -145,7 +175,13 @@ function ScheduledContent({ menuButton }) {
               {selected.platforms.length > 0 ? (
                 <DetailRow label="Nền tảng" value={selected.platforms.join(', ')} />
               ) : null}
-              {selected.content ? <DetailRow label="Nội dung" value={selected.content} /> : null}
+              {selected.content || selectedAttachments.length > 0 ? (
+                <View style={styles.contentSection}>
+                  <Text style={styles.detailLabel}>Nội dung</Text>
+                  {selected.content ? <Text style={styles.detailValue} selectable>{selected.content}</Text> : null}
+                  {selectedAttachments.length > 0 ? <MessageAttachments attachments={selectedAttachments} /> : null}
+                </View>
+              ) : null}
               <Pressable
                 onPress={() => router.replace(`/projects/${selected.conversation_id}`)}
                 disabled={!projectName}
@@ -169,7 +205,7 @@ function ScheduledContent({ menuButton }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -258,6 +294,9 @@ const styles = StyleSheet.create({
   },
   detailRow: {
     gap: 4,
+  },
+  contentSection: {
+    gap: 8,
   },
   detailLabel: {
     color: colors.textSecondary,

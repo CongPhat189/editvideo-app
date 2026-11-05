@@ -19,7 +19,7 @@ import DrawerScreen from '@/components/DrawerScreen';
 import { AgentIcon, CheckIcon, FolderIcon } from '@/components/HomeIcons';
 import PageHeader from '@/components/PageHeader';
 import { MyUserContext } from '@/config/Contexts';
-import { colors } from '@/constants/theme';
+import { useThemeColors, useThemeStyles } from '@/constants/theme';
 import { getAgents } from '@/services/agents';
 import { getErrorMessage } from '@/services/auth';
 import { createProject } from '@/services/projects';
@@ -35,6 +35,9 @@ export default function NewProject() {
 }
 
 function NewProjectContent({ menuButton }) {
+  const colors = useThemeColors();
+  const styles = useThemeStyles(createStyles);
+
   const [user] = use(MyUserContext);
   const token = user?.access_token;
   const [name, setName] = useState('');
@@ -44,7 +47,7 @@ function NewProjectContent({ menuButton }) {
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Tải lại khi quay về từ form thêm Agent
+  // Tải lại khi quay về từ form thêm Agen
   useFocusEffect(
     useCallback(() => {
       if (!token) return undefined;
@@ -89,7 +92,7 @@ function NewProjectContent({ menuButton }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar style={colors.backgroundDeep === '#000000' ? 'light' : 'dark'} />
       <PageHeader title="Dự án mới" left={menuButton} />
       <KeyboardAvoidingView
         style={styles.flex}
@@ -153,7 +156,7 @@ function NewProjectContent({ menuButton }) {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,

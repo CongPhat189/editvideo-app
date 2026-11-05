@@ -308,6 +308,12 @@ class ScheduledTask(Base):
             name="scheduled_tasks_conversation_owner_fk",
             ondelete="SET NULL (conversation_id)",
         ),
+        ForeignKeyConstraint(
+            ["content_message_id", "conversation_id"],
+            ["messages.id", "messages.conversation_id"],
+            name="scheduled_tasks_content_message_fk",
+            ondelete="SET NULL (content_message_id)",
+        ),
         CheckConstraint(
             "task_type in ('send_message', 'execute_agent', 'execute_workflow', 'publish_post')",
             name="scheduled_tasks_type_chk",
@@ -327,11 +333,17 @@ class ScheduledTask(Base):
         Index(
             "idx_scheduled_tasks_conversation", "conversation_id", postgresql_where=text("conversation_id is not null")
         ),
+        Index(
+            "idx_scheduled_tasks_content_message",
+            "content_message_id",
+            postgresql_where=text("content_message_id is not null"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     conversation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    content_message_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     agent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="SET NULL"))
     task_name: Mapped[str] = mapped_column(String(255))
     task_type: Mapped[str] = mapped_column(String(50))
