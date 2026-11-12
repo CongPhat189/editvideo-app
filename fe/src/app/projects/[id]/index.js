@@ -31,6 +31,7 @@ import {
   sendMessage,
   sendMessageWithFiles,
 } from '@/services/projects';
+import { isScheduleContent } from '@/services/schedules';
 
 const POLL_INTERVAL = 3000;
 const MAX_MESSAGE_LENGTH = 20000;
@@ -43,8 +44,7 @@ const MessageBubble = (props) => (
   </FadeIn>
 );
 
-const MessageContent = ({ message, showScheduleButton, onLongPress, onSchedule }) => {
-  const colors = useThemeColors();
+const MessageContent = ({ message }) => {
   const styles = useThemeStyles(createStyles);
 
   const attachments = message.attachments ?? [];
@@ -78,37 +78,16 @@ const MessageContent = ({ message, showScheduleButton, onLongPress, onSchedule }
       </View>
     );
   }
-  const canSchedule = Boolean(message.content?.trim() || attachments.length > 0);
   return (
     <View style={styles.replyMessage}>
       <View style={styles.replyHeader}>
         <BrandMark size={24} />
         <Text style={styles.replyAuthor}>Agent</Text>
       </View>
-      <Pressable
-        style={styles.replyBody}
-        onLongPress={onLongPress}
-        delayLongPress={350}
-        disabled={message.status !== 'completed' || !canSchedule}
-        accessibilityRole="button"
-        accessibilityLabel="Nhấn giữ để đặt lịch tin nhắn này"
-      >
+      <View style={styles.replyBody}>
         {attachments.length > 0 ? <MessageAttachments attachments={attachments} /> : null}
-        {message.content ? <Text style={styles.messageText}>{message.content}</Text> : null}
-      </Pressable>
-      {showScheduleButton ? (
-        <PopIn from={0.8}>
-        <Pressable
-          onPress={onSchedule}
-          style={({ pressed }) => [styles.scheduleMessageButton, pressed && styles.pressed]}
-          accessibilityRole="button"
-          accessibilityLabel="Đặt lịch nội dung này"
-        >
-          <CalendarIcon size={15} color={colors.gold} />
-          <Text style={styles.scheduleMessageButtonText}>Đặt lịch</Text>
-        </Pressable>
-        </PopIn>
-      ) : null}
+        {message.content ? <Text style={styles.messageText} selectable>{message.content}</Text> : null}
+      </View>
     </View>
   );
 };
@@ -138,7 +117,6 @@ function ChatContent({ id, menuButton }) {
   const [files, setFiles] = useState([]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
-  const [scheduleActionMessageId, setScheduleActionMessageId] = useState(null);
   const loadingOlder = useRef(false);
   const inputRef = useRef(null);
 
@@ -254,6 +232,8 @@ function ChatContent({ id, menuButton }) {
   };
 
   const canSend = (text.trim().length > 0 || files.length > 0) && !sending;
+  // Có tin agent trả lời xong (content) thì mới đặt lịch được
+  const canSchedule = !sending && messages.some(isScheduleContent);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -293,17 +273,7 @@ function ChatContent({ id, menuButton }) {
             inverted
             data={messages}
             keyExtractor={(message) => message.id}
-            renderItem={({ item }) => (
-              <MessageBubble
-                message={item}
-                showScheduleButton={String(scheduleActionMessageId) === String(item.id)}
-                onLongPress={() => setScheduleActionMessageId(item.id)}
-                onSchedule={() => router.push({
-                  pathname: '/projects/[id]/schedule',
-                  params: { id, contentMessageId: item.id },
-                })}
-              />
-            )}
+            renderItem={({ item }) => <MessageBubble message={item} />}
             contentContainerStyle={styles.messages}
             onEndReached={loadOlder}
             onEndReachedThreshold={0.3}
@@ -343,6 +313,16 @@ function ChatContent({ id, menuButton }) {
                   accessibilityLabel="Thêm ảnh hoặc video"
                 >
                   <PlusIcon size={19} color={colors.textSecondary} />
+                </Pressable>
+                <Pressable
+                  onPress={() => router.push({ pathname: '/projects/[id]/schedule', params: { id } })}
+                  disabled={!canSchedule}
+                  style={({ pressed }) => [styles.actionButton, !canSchedule && styles.disabled, pressed && styles.pressed]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Đặt lịch đăng content mới nhất"
+                  accessibilityState={{ disabled: !canSchedule }}
+                >
+                  <CalendarIcon size={18} color={colors.gold} />
                 </Pressable>
                 <Pressable
                   onPress={() => inputRef.current?.focus()}
@@ -447,24 +427,6 @@ const createStyles = (colors) => StyleSheet.create({
     alignSelf: 'stretch',
     gap: 8,
     paddingLeft: 32,
-  },
-  scheduleMessageButton: {
-    minHeight: 36,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    marginLeft: 32,
-    paddingHorizontal: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.goldBorder,
-    backgroundColor: colors.goldSoft,
-  },
-  scheduleMessageButtonText: {
-    color: colors.gold,
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 0.2,
   },
   userBubble: {
     maxWidth: '85%',
@@ -614,5 +576,8 @@ const createStyles = (colors) => StyleSheet.create({
   },
   pressed: {
     opacity: 0.75,
+  },
+  disabled: {
+    opacity: 0.4,
   },
 });

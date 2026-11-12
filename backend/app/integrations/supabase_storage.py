@@ -51,10 +51,14 @@ async def upload(path: str, data: bytes, mime_type: str) -> None:
                 headers={**headers, "Content-Type": mime_type, "x-upsert": "false"},
             )
     except httpx.HTTPError as e:
-        log.warning("Không kết nối được Storage: %s", e)
+        log.warning("Không kết nối được Storage (%s): %r", type(e).__name__, e)
         raise StorageError("Không lưu được file, vui lòng thử lại")
     if resp.is_error:
-        log.warning("Storage trả %s khi tải file lên", resp.status_code)
+        # Thân lỗi của Storage chỉ có statusCode/error/message, không chứa key
+        log.warning(
+            "Storage trả %s khi tải file lên (%s, %d byte): %s",
+            resp.status_code, mime_type, len(data), resp.text[:300],
+        )
         if _is_rejected(resp):
             raise StorageError("Loại file không được hỗ trợ hoặc file quá lớn", rejected=True)
         raise StorageError("Không lưu được file, vui lòng thử lại")

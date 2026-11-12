@@ -21,10 +21,14 @@ export const getSchedules = async (token) => {
   return schedules;
 };
 
-export const createSchedule = async (token, { projectId, contentMessageId, platforms, scheduledAt, timezone }) => {
+// Tin agent đã trả lời xong và có chữ: dùng làm content để đăng
+export const isScheduleContent = (message) =>
+  message.role === 'assistant' && message.status === 'completed' && Boolean(message.content?.trim());
+
+export const createSchedule = async (token, { projectId, content, platforms, scheduledAt, timezone }) => {
   const res = await authApis(token).post(endpoints.schedules, {
     conversation_id: projectId,
-    content_message_id: contentMessageId,
+    content,
     platforms,
     scheduled_at: scheduledAt,
     timezone,

@@ -7,7 +7,6 @@ Agent có thể đăng bài thật, nên hết giờ chờ hay worker chết gi�
 """
 
 import asyncio
-from io import BytesIO
 import os
 import socket
 import uuid
@@ -18,14 +17,13 @@ from sqlalchemy import and_, func, or_, select, update
 from app.core.config import get_settings
 from app.core.logging import logger
 from app.db.supabase import get_sessionmaker
-from app.integrations import goclaw, supabase_storage
+from app.integrations import goclaw
 from app.models import Agent, AppUser, Conversation, ScheduledTask, ScheduledTaskLog
 from app.services import chat_service
 
 WORKER_ID = f"{socket.gethostname()}:{os.getpid()}"[:100]
 MAX_CONCURRENT = 5
 RETRY_DELAY_SECONDS = 60
-NOTICE_KIND = "schedule_notice"  # Tin báo gửi ngầm cho agent, không phải lịch của người dùng, không hiện trong khung chat
 # Mỗi lần thử có idempotency_key riêng nhưng cố định, sinh từ id của lịch
 _KEY_NAMESPACE = uuid.UUID("6f1d3c52-8a57-4c1e-9b1f-2f6a4d7e9c10")
 
@@ -99,7 +97,12 @@ async def claim_due(limit: int) -> list[uuid.UUID]:
     return list(ids)
 
 
-async def _deliver(session, *, conversation_id, user_id, content, key, hidden, media=None) -> dict:
+def publish_message(content: str, platforms: list[str]) -> str:
+    """Tin gửi cho agent khi đến giờ: tên nền tảng + nguyên văn content."""
+    return f"Đăng lên {', '.join(platforms)}:\n\n{content}" if platforms else content
+
+
+async def _deliver(session, *, conversation_id, user_id, content, key) -> dict:
     conv = None
     if conversation_id is not None:
         conv = await session.scalar(
@@ -126,8 +129,6 @@ async def _deliver(session, *, conversation_id, user_id, content, key, hidden, m
             user_id=user_id,
             content=content,
             idempotency_key=key,
-            hidden=hidden,
-            media=media,
         )
     except chat_service.ReplyInFlight:
         raise _TaskFailed("Agent đang trả lời tin trước trong cuộc trò chuyện", retryable=True)
@@ -144,8 +145,8 @@ async def run_task(task_id: uuid.UUID) -> None:
         # Lưu ra biến: sau rollback các object bị hết hạn
         attempt, max_attempts = task.attempts, task.max_attempts
         conversation_id, user_id = task.conversation_id, task.user_id
-        content = task.payload.get("agent_instruction") or task.payload.get("content")
-        hidden = task.payload.get("kind") == NOTICE_KIND or "agent_instruction" in task.payload
+        content = task.payload.get("content")
+        platforms = list(task.platforms or [])
         session.add(
             ScheduledTaskLog(
                 task_id=task_id,
@@ -161,29 +162,12 @@ async def run_task(task_id: uuid.UUID) -> None:
         try:
             if not content:
                 raise _TaskFailed("Lịch không có nội dung tin nhắn")
-            media = []
-            for item in task.payload.get("media", []):
-                try:
-                    file_path = item["file_path"]
-                    file_name = item["file_name"]
-                    mime_type = item["mime_type"]
-                except (KeyError, TypeError):
-                    raise _TaskFailed("Thông tin ảnh đính kèm của lịch không hợp lệ") from None
-                try:
-                    file_data = await supabase_storage.download(file_path)
-                except supabase_storage.StorageError as e:
-                    raise _TaskFailed(str(e)) from e
-                if not file_data:
-                    raise _TaskFailed(f"Ảnh đính kèm {file_name} đang trống")
-                media.append(goclaw.GoClawMedia(file_name, mime_type, BytesIO(file_data)))
             response = await _deliver(
                 session,
                 conversation_id=conversation_id,
                 user_id=user_id,
-                content=content,
+                content=publish_message(content, platforms),
                 key=uuid.uuid5(_KEY_NAMESPACE, f"{task_id}:{attempt}"),
-                hidden=hidden,
-                media=media,
             )
         except (_TaskFailed, goclaw.GoClawError) as e:
             error, retryable = str(e), getattr(e, "retryable", False)

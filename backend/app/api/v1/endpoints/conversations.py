@@ -212,7 +212,6 @@ async def send_message(
             user_id=user_id,
             content=body.content,
             idempotency_key=body.idempotency_key,
-            response_mode=body.response_mode,
         )
     except chat_service.ReplyInFlight:
         raise HTTPException(status.HTTP_409_CONFLICT, "Agent đang trả lời tin trước, đợi xong rồi gửi tiếp")

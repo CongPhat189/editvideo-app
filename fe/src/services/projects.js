@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import { authApis, endpoints } from '@/config/Apis';
 
 // Dự án chính là một cuộc trò chuyện (bảng conversations): có id riêng và lịch sử chat riêng
@@ -33,14 +35,21 @@ export const sendMessage = async (token, id, content) => {
   return res.data;
 };
 
+// Web: trình duyệt cần Blob/File thật. Điện thoại: React Native nhận {uri, name, type}.
+const toFormFile = async (file) => {
+  if (Platform.OS !== 'web') return { uri: file.uri, name: file.fileName, type: file.mimeType };
+  return file.file ?? (await (await fetch(file.uri)).blob());
+};
+
 export const sendMessageWithFiles = async (token, id, content, files) => {
   const form = new FormData();
-  files.forEach((file) => {
-    form.append('files', { uri: file.uri, name: file.fileName, type: file.mimeType });
-  });
+  for (const file of files) {
+    form.append('files', await toFormFile(file), file.fileName);
+  }
   if (content) form.append('content', content);
   const res = await authApis(token).post(endpoints.messagesUpload(id), form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    // Web: để trình duyệt tự đặt Content-Type kèm boundary
+    headers: Platform.OS === 'web' ? {} : { 'Content-Type': 'multipart/form-data' },
     transformRequest: (data) => data,
   });
   return res.data;

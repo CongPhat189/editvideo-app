@@ -14,14 +14,8 @@ from app.integrations import goclaw
 from app.models import Conversation, Message, MessageAttachment
 
 
-HIDDEN_KEY = "hidden"  # Khóa trong messages.metadata của tin không hiện trong khung chat
-
-CONTENT_ONLY_INSTRUCTION = (
-    "\n\n[CHẾ ĐỘ TẠO CONTENT]\n"
-    "Chỉ trả về bản content hoàn chỉnh để đăng. Không viết lời dẫn, giải thích, nhận xét, tiêu đề kiểu 'bản nháp', "
-    "câu hỏi, lựa chọn tiếp theo hoặc lời mời trao đổi. Không hỏi lại; tự hoàn thiện nội dung hợp lý từ thông tin đã có. "
-    "Giữ nguyên ngôn ngữ, emoji và hashtag phù hợp. Response chỉ gồm đúng phần content có thể đăng, không bọc markdown."
-)
+# Tin có khóa này trong messages.metadata (tin ngầm của bản cũ) không hiện trong khung chat
+HIDDEN_KEY = "hidden"
 
 
 class ReplyInFlight(Exception):
@@ -83,8 +77,6 @@ async def send_to_agent(
     user_id: uuid.UUID,
     content: str | None,
     idempotency_key: uuid.UUID,
-    response_mode: str = "chat",
-    hidden: bool = False,
     content_type: str = "text",
     attachments: list[dict] | None = None,
     media: list[goclaw.GoClawMedia] | None = None,
@@ -96,7 +88,6 @@ async def send_to_agent(
     2. Gọi GoClaw (không giữ transaction trong lúc chờ).
     3. Ghi câu trả lời (completed) hoặc lỗi (failed). Lỗi GoClaw nằm trong SendResult.error.
 
-    hidden: tin do hệ thống gửi thay user, không hiện trong khung chat. Câu trả lời của agent vẫn hiện.
     attachments: các dòng message_attachments, ghi cùng transaction với tin. media: file gửi cho agent.
     """
     session_key = conv.goclaw_session_id or goclaw.session_key_for(target, conv.id)
@@ -108,7 +99,6 @@ async def send_to_agent(
         content_type=content_type,
         status="completed",
         idempotency_key=idempotency_key,
-        meta={HIDDEN_KEY: True} if hidden else {},
         created_at=_created_after(conv.last_message_at),
     )
     session.add(user_msg)
@@ -141,11 +131,8 @@ async def send_to_agent(
     error = None
     try:
         extra = {"media": media} if media else {}
-        agent_content = (content or "")
-        if response_mode == "content_only":
-            agent_content += CONTENT_ONLY_INSTRUCTION
         result = await goclaw.send_message(
-            target, session_key=session_key, user_id=user_id, content=agent_content, **extra
+            target, session_key=session_key, user_id=user_id, content=content or "", **extra
         )
         await session.execute(
             update(Message)
@@ -165,13 +152,12 @@ async def send_to_agent(
             .values(goclaw_session_id=func.coalesce(Conversation.goclaw_session_id, result.session_id))
             .execution_options(synchronize_session=False)
         )
-        if not hidden:  # tin ẩn không được lộ ra qua tên cuộc trò chuyện
-            await session.execute(
-                update(Conversation)
-                .where(Conversation.id == conv_id, Conversation.title.is_(None))
-                .values(title=(title or content or "").strip()[:60])
-                .execution_options(synchronize_session=False)
-            )
+        await session.execute(
+            update(Conversation)
+            .where(Conversation.id == conv_id, Conversation.title.is_(None))
+            .values(title=(title or content or "").strip()[:60])
+            .execution_options(synchronize_session=False)
+        )
         await session.commit()
     except Exception as e:
         # Lỗi GoClaw, lỗi ghi kết quả hay lỗi ngoài dự kiến: vẫn đóng câu trả lời để user gửi tiếp được

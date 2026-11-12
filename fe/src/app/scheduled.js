@@ -11,6 +11,7 @@ import { Eyebrow } from '@/components/Luxe';
 import { Breathing, FadeIn, stagger } from '@/components/Motion';
 import MonthCalendar, { toDayKey } from '@/components/MonthCalendar';
 import PageHeader from '@/components/PageHeader';
+import PlatformIcon from '@/components/PlatformIcons';
 import { MyUserContext } from '@/config/Contexts';
 import { fonts, useThemeColors, useThemeStyles } from '@/constants/theme';
 import { getErrorMessage } from '@/services/auth';
@@ -182,7 +183,17 @@ function ScheduledContent({ menuButton }) {
               <DetailRow label="Tên" value={selected.task_name} />
               <DetailRow label="Thời gian" value={formatScheduleTime(selected)} />
               {selected.platforms.length > 0 ? (
-                <DetailRow label="Nền tảng" value={selected.platforms.join(', ')} />
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Nền tảng</Text>
+                  <View style={styles.platformList}>
+                    {selected.platforms.map((platform) => (
+                      <View key={platform} style={styles.platformItem}>
+                        <PlatformIcon platform={platform} size={18} />
+                        <Text style={styles.detailValue}>{platform}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
               ) : null}
               {selected.content || selectedAttachments.length > 0 ? (
                 <View style={styles.contentSection}>
@@ -349,6 +360,16 @@ const createStyles = (colors) => StyleSheet.create({
   },
   detailRow: {
     gap: 5,
+  },
+  platformList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  platformItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   contentSection: {
     gap: 8,

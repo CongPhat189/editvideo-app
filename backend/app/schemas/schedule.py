@@ -24,15 +24,11 @@ class SchedulePayload(BaseModel):
 
 class ScheduleCreate(BaseModel):
     conversation_id: uuid.UUID = Field(description="Cuộc trò chuyện đang mở")
-    content_message_id: uuid.UUID | None = Field(
-        default=None,
-        description="ID tin nhắn assistant chứa nội dung cần gắn với lịch; phải thuộc conversation_id này",
-    )
     scheduled_at: datetime = Field(
         description="Ngày giờ đặt lịch: 05/11/2026 20:00 hoặc 2026-11-05T20:00, có thể chỉ có ngày. "
         "Không kèm múi giờ thì hiểu theo timezone"
     )
-    # Có content: chỉ lưu khi đặt lịch; đến giờ worker mới gửi lệnh đăng cho agent.
+    # Văn bản cần đăng (thường là tin agent vừa trả lời). Đến giờ worker gửi cho agent kèm tên nền tảng.
     content: Content | None = None
     platforms: list[str] = Field(default_factory=list, max_length=len(PLATFORMS), description="Nền tảng cần đăng")
     timezone: str = Field(default="Asia/Ho_Chi_Minh", max_length=100)
@@ -83,7 +79,6 @@ class ScheduleCreate(BaseModel):
 class ScheduleOut(BaseModel):
     id: uuid.UUID
     conversation_id: uuid.UUID | None
-    content_message_id: uuid.UUID | None = None
     agent_id: uuid.UUID | None
     task_name: str
     content: str | None
@@ -102,7 +97,6 @@ class ScheduleOut(BaseModel):
         return cls(
             id=task.id,
             conversation_id=task.conversation_id,
-            content_message_id=task.content_message_id,
             agent_id=task.agent_id,
             task_name=task.task_name,
             content=task.payload.get("content"),

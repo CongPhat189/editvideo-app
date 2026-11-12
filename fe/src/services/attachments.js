@@ -15,6 +15,8 @@ const toFile = (asset, index) => {
     mimeType,
     fileName: asset.fileName ?? `file-${Date.now()}-${index}.${extension}`,
     fileSize: asset.fileSize,
+    // Chỉ có trên web: File thật của trình duyệt, dùng khi gửi FormData
+    file: asset.file,
   };
 };
 

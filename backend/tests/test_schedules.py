@@ -27,11 +27,12 @@ async def _setup(agents):
     return user, await _conversation(user, agents[GENERAL])
 
 
-async def _schedule(user, conv, content="Viết bài cho tôi", **body):
+async def _schedule(user, conv, content="Viết bài cho tôi", platforms=("Facebook",), **body):
     async with Client(user) as c:
         r = await c.post(
             "/schedules",
-            json={"conversation_id": conv["id"], "content": content, "scheduled_at": _future(), **body},
+            json={"conversation_id": conv["id"], "content": content, "platforms": list(platforms),
+                  "scheduled_at": _future(), **body},
         )
     assert r.status_code == 201, r.text
     return r.json()
@@ -85,7 +86,7 @@ async def test_date_only_is_saved_and_never_sent(agents):
     assert iso.json()["agent_id"] == str(agents[GENERAL])
 
     async with Client(user) as c:
-        assert len((await c.get("/schedules")).json()) == 3  # tin báo ngầm không hiện như một lịch
+        assert len((await c.get("/schedules")).json()) == 3
 
     await _make_due(iso.json()["id"])
     assert iso.json()["id"] not in await _run_worker()
@@ -106,67 +107,57 @@ async def test_date_only_requires_conversation_and_rejects_past(agents):
         assert (await c.post("/schedules", json=unknown)).status_code == 404
 
 
-async def test_schedule_sends_notice_to_chosen_conversation_in_background(agents):
+
+
+
+async def test_creating_schedule_sends_nothing_to_agent(agents):
     user, conv = await _setup(agents)
-    other = await _conversation(user, agents[GENERAL])
     day = (datetime.now(VN) + timedelta(days=2)).strftime("%d/%m/%Y")
     async with Client(user) as c:
-        r = await c.post("/schedules", json={"conversation_id": conv["id"], "scheduled_at": f"{day} 20:00"})
-        assert r.status_code == 201, r.text
-        s = r.json()
-        # API trả về ngay, chưa gửi gì cho agent
+        for body in ({"scheduled_at": f"{day} 20:00"}, {"scheduled_at": day}):
+            r = await c.post("/schedules", json={"conversation_id": conv["id"], **body})
+            assert r.status_code == 201, r.text
+            assert r.json()["platforms"] == []
+        await _schedule(user, conv)
+        assert await _run_worker() == []
         assert (await c.get(f"/conversations/{conv['id']}/messages")).json()["items"] == []
-
-    claimed = await _run_worker()
-    assert s["id"] not in claimed and len(claimed) == 1
-    async with Client(user) as c:
-        items = (await c.get(f"/conversations/{conv['id']}/messages")).json()["items"]
-        assert (await c.get(f"/conversations/{other['id']}/messages")).json()["items"] == []
-    # Tin ngầm không hiện, câu trả lời của agent thì có
-    assert [(m["role"], m["status"]) for m in items] == [("assistant", "completed")]
-    sent = await sql("select id, content from messages where conversation_id = :c and role = 'user'", c=conv["id"])
-    assert [x["content"] for x in sent] == [f"hẹn lịch đăng vào {day} 20:00"]
-    assert items[0]["reply_to_message_id"] == str(sent[0]["id"])
-    async with Client(user) as c:
-        hits = (await c.get("/search", params={"q": "hen lich dang"})).json()
-        title = (await c.get(f"/conversations/{conv['id']}")).json()["title"]
-    assert str(sent[0]["id"]) not in [h["message_id"] for h in hits]
-    assert title is None
-    assert s["task_name"] == f"Lịch {day} 20:00"
-    assert (await _get(user, s["id"]))["status"] == "scheduled"  # lịch vẫn giữ nguyên
-
-    assert await _run_worker() == []  # không gửi lần hai
-    await _make_due(s["id"])
-    assert await _run_worker() == []  # đến ngày cũng không gửi thêm
     await sql("delete from scheduled_tasks where user_id = :u", u=user)
 
 
-async def test_platforms_are_saved_and_named_in_notice(agents):
+async def test_content_requires_platform(agents):
     user, conv = await _setup(agents)
-    day = (datetime.now(VN) + timedelta(days=2)).strftime("%d/%m/%Y")
-    body = {
-        "conversation_id": conv["id"],
-        "scheduled_at": f"{day} 20:00",
-        "platforms": ["facebook", " TIKTOK ", "Facebook"],
-    }
     async with Client(user) as c:
-        r = await c.post("/schedules", json=body)
-        assert r.status_code == 201, r.text
-        assert r.json()["platforms"] == ["Facebook", "TikTok"]
-        assert (await c.get("/schedules")).json()[0]["platforms"] == ["Facebook", "TikTok"]
-    row = await sql("select platforms, payload from scheduled_tasks where id = :i", i=r.json()["id"])
-    assert (row[0]["platforms"], row[0]["payload"]) == (["Facebook", "TikTok"], {})  # nằm ở cột riêng
+        body = {"conversation_id": conv["id"], "content": "alo", "scheduled_at": _future()}
+        assert (await c.post("/schedules", json=body)).status_code == 422
+    assert await sql("select id from scheduled_tasks where user_id = :u", u=user) == []
+
+
+async def test_due_schedule_sends_platforms_and_content_as_normal_message(agents):
+    user, conv = await _setup(agents)
+    s = await _schedule(user, conv, content="Viết bài", platforms=["facebook", " TIKTOK ", "Facebook"])
+    assert s["platforms"] == ["Facebook", "TikTok"]
+    row = await sql("select platforms, payload from scheduled_tasks where id = :i", i=s["id"])
+    assert (row[0]["platforms"], row[0]["payload"]) == (["Facebook", "TikTok"], {"content": "Viết bài"})
+    await _make_due(s["id"])
     await _run_worker()
     sent = await sql("select content, metadata from messages where conversation_id = :c and role = 'user'", c=conv["id"])
-    assert [x["content"] for x in sent] == [f"hẹn lịch đăng lên Facebook, TikTok vào {day} 20:00"]
-    assert sent[0]["metadata"].get("hidden") is True
+    assert [x["content"] for x in sent] == ["Đăng lên Facebook, TikTok:\n\nViết bài"]
+    assert sent[0]["metadata"] == {}  # tin thường, hiện trong khung chat
     await sql("delete from scheduled_tasks where user_id = :u", u=user)
 
 
-async def test_schedule_without_platforms_defaults_to_empty(agents):
+async def test_failed_publish_shows_reply_error_and_later_chat_is_normal(agents):
     user, conv = await _setup(agents)
     s = await _schedule(user, conv)
-    assert s["platforms"] == []
+    await _make_due(s["id"])
+    with mock.patch.object(goclaw, "send_message", side_effect=goclaw.GoClawError("Agent phản hồi quá lâu")):
+        await _run_worker()
+    async with Client(user) as c:
+        r = await c.post(f"/conversations/{conv['id']}/messages", json={"content": "tin thường"})
+        assert r.status_code == 201, r.text
+        items = (await c.get(f"/conversations/{conv['id']}/messages")).json()["items"]
+    assert [(m["role"], m["status"]) for m in items][2:] == [("assistant", "failed"), ("user", "completed")]
+    assert items[1]["content"] == "tin thường"
     await sql("delete from scheduled_tasks where user_id = :u", u=user)
 
 
@@ -189,49 +180,7 @@ async def test_platforms_stay_on_schedule_with_content_and_are_still_sent_at_due
     assert (await _get(user, s["id"]))["status"] == "completed"
 
 
-async def test_notice_without_time_shows_date_only(agents):
-    user, conv = await _setup(agents)
-    day = (datetime.now(VN) + timedelta(days=2)).strftime("%d/%m/%Y")
-    async with Client(user) as c:
-        await c.post("/schedules", json={"conversation_id": conv["id"], "scheduled_at": day})
-    await _run_worker()
-    sent = await sql("select content from messages where conversation_id = :c and role = 'user'", c=conv["id"])
-    assert [x["content"] for x in sent] == [f"hẹn lịch đăng vào {day}"]
-    await sql("delete from scheduled_tasks where user_id = :u", u=user)
 
-
-async def test_failed_notice_still_shows_reply_error_and_later_chat_is_normal(agents):
-    user, conv = await _setup(agents)
-    async with Client(user) as c:
-        body = {"conversation_id": conv["id"], "scheduled_at": _future()}
-        assert (await c.post("/schedules", json=body)).status_code == 201
-    with mock.patch.object(goclaw, "send_message", side_effect=goclaw.GoClawError("Agent phản hồi quá lâu")):
-        await _run_worker()
-    async with Client(user) as c:
-        items = (await c.get(f"/conversations/{conv['id']}/messages")).json()["items"]
-        assert [(m["role"], m["status"]) for m in items] == [("assistant", "failed")]
-        r = await c.post(f"/conversations/{conv['id']}/messages", json={"content": "tin thường"})
-        assert r.status_code == 201, r.text
-        items = (await c.get(f"/conversations/{conv['id']}/messages")).json()["items"]
-    assert [m["role"] for m in items] == ["assistant", "user", "assistant"]
-    assert items[1]["content"] == "tin thường"
-    await sql("delete from scheduled_tasks where user_id = :u", u=user)
-
-
-async def test_notice_retries_when_agent_busy(agents):
-    user, conv = await _setup(agents)
-    await sql(
-        "insert into messages (conversation_id, user_id, role, status) values (:c, :u, 'assistant', 'processing')",
-        c=conv["id"], u=user,
-    )
-    async with Client(user) as c:
-        body = {"conversation_id": conv["id"], "scheduled_at": _future()}
-        assert (await c.post("/schedules", json=body)).status_code == 201
-    await _run_worker()
-    rows = await sql("select status from scheduled_tasks where user_id = :u and payload ? 'kind'", u=user)
-    assert [x["status"] for x in rows] == ["retrying"]
-    await sql("update messages set status = 'failed' where conversation_id = :c", c=conv["id"])
-    await sql("delete from scheduled_tasks where user_id = :u", u=user)
 
 
 async def test_schedule_fails_fast_when_agent_not_configured(agents):
@@ -266,7 +215,8 @@ async def test_rejects_bad_input(agents):
     ]
     async with Client(user) as c:
         for override in bad:
-            body = {"conversation_id": conv["id"], "content": "alo", "scheduled_at": _future(), **override}
+            body = {"conversation_id": conv["id"], "content": "alo", "platforms": ["Facebook"],
+                    "scheduled_at": _future(), **override}
             assert (await c.post("/schedules", json=body)).status_code == 422, override
     async with Client() as c:
         body = {"conversation_id": conv["id"], "content": "alo", "scheduled_at": _future()}
@@ -298,7 +248,8 @@ async def test_live_mode_rejects_agent_without_agent_key_when_scheduling(agents)
     user, conv = await _setup(agents)
     with mock.patch.object(get_settings(), "goclaw_mode", "live"):
         async with Client(user) as c:
-            body = {"conversation_id": conv["id"], "content": "alo", "scheduled_at": _future()}
+            body = {"conversation_id": conv["id"], "content": "alo", "platforms": ["Facebook"],
+                    "scheduled_at": _future()}
             assert (await c.post("/schedules", json=body)).status_code == 503
 
 
@@ -316,7 +267,7 @@ async def test_worker_sends_due_message_once_and_reply_lands_in_conversation(age
     async with Client(user) as c:
         items = (await c.get(f"/conversations/{conv['id']}/messages")).json()["items"]
     assert [(m["role"], m["status"]) for m in items] == [("assistant", "completed"), ("user", "completed")]
-    assert items[1]["content"] == "Viết bài lúc 8 giờ"
+    assert items[1]["content"] == "Đăng lên Facebook:\n\nViết bài lúc 8 giờ"
     assert "Viết bài lúc 8 giờ" in items[0]["content"]
 
     logs = await sql("select attempt_number, status, response_payload from scheduled_task_logs where task_id = :i", i=s["id"])
